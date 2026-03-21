@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   StdioTransport,
+  TransportError,
   TransportProtocolError,
   TransportStateError,
   type JsonValue
@@ -115,6 +116,31 @@ describe("StdioTransport", () => {
 
     expect(errors).toHaveLength(1);
     expect(errors[0]).toBeInstanceOf(TransportProtocolError);
+    expect(transport.state).toBe("closed");
+  });
+
+  it("treats abrupt input close as a transport error", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const transport = new StdioTransport({ input, output });
+
+    const errors: Error[] = [];
+    transport.onError((error) => {
+      errors.push(error);
+    });
+
+    await transport.start();
+    input.write('{"id":1');
+    input.destroy();
+
+    await once(input, "close");
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(TransportError);
+    expect(errors[0]).not.toBeInstanceOf(TransportProtocolError);
+    expect(errors[0]?.message).toBe(
+      "Input stream closed before ending cleanly."
+    );
     expect(transport.state).toBe("closed");
   });
 });

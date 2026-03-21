@@ -3,6 +3,7 @@ import type { Readable, Writable } from "node:stream";
 
 import { ListenerSet } from "./listenerSet.js";
 import {
+  TransportError,
   TransportProtocolError,
   TransportStateError,
   type JsonValue,
@@ -27,6 +28,7 @@ export class StdioTransport implements Transport {
   readonly #options: Required<StdioTransportOptions>;
 
   #buffer = "";
+  #receivedInputEnd = false;
   #state: TransportState = "idle";
 
   public constructor(options: StdioTransportOptions) {
@@ -130,6 +132,8 @@ export class StdioTransport implements Transport {
   };
 
   readonly #handleInputEnd = (): void => {
+    this.#receivedInputEnd = true;
+
     const remainder = this.#decoder.end();
     if (remainder.length > 0) {
       this.#buffer += remainder;
@@ -148,7 +152,19 @@ export class StdioTransport implements Transport {
   };
 
   readonly #handleInputClose = (): void => {
-    this.#finalizeClose();
+    if (this.#state !== "open" || this.#receivedInputEnd) {
+      this.#finalizeClose();
+      return;
+    }
+
+    const remainder = this.#decoder.end();
+    if (remainder.length > 0) {
+      this.#buffer += remainder;
+    }
+
+    this.#fail(
+      new TransportError("Input stream closed before ending cleanly.")
+    );
   };
 
   readonly #handleInputError = (error: Error): void => {
@@ -203,6 +219,7 @@ export class StdioTransport implements Transport {
 
     this.#detachStreamListeners();
     this.#buffer = "";
+    this.#receivedInputEnd = false;
     this.#state = "closed";
     this.#closeListeners.notify(error);
   }
