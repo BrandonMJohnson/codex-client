@@ -6,8 +6,16 @@ const codexCheck = spawnSync("codex", ["--version"], {
   stdio: ["ignore", "pipe", "pipe"]
 });
 
+if (codexCheck.error) {
+  console.error(
+    `The codex CLI is required to run integration tests: ${codexCheck.error.message}`
+  );
+  process.exit(1);
+}
+
 if (codexCheck.status !== 0) {
-  const stderr = codexCheck.stderr.trim();
+  const stderr =
+    typeof codexCheck.stderr === "string" ? codexCheck.stderr.trim() : "";
   const detail =
     stderr.length > 0
       ? stderr
