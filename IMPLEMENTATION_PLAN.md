@@ -31,6 +31,9 @@ The protocol details in this plan are derived from that README, including:
 - Added focused unit coverage for framing, chunked reads, malformed input, and lifecycle gating.
 - Aligned the build output layout with the published package entrypoints so `dist/index.js` resolves correctly.
 - Git is initialized, and the first transport slice has already gone through review and QA passes.
+- Added a first-pass `rpc/` session layer on top of transport with request id generation, pending request tracking, response correlation, notification routing, and incoming server-request routing.
+- Enforced the `initialize` -> `initialized` handshake in the RPC session so client-originated methods stay gated until startup completes.
+- Added focused unit coverage for request/response matching, initialize-state rules, incoming request routing, transport-close rejection, and protocol-error handling.
 
 ## Architectural Direction
 
@@ -135,12 +138,12 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ### 2. RPC Session Layer
 
-- [ ] Implement outbound request id generation
-- [ ] Track pending requests and resolve responses
-- [ ] Route notifications separately from responses
-- [ ] Route incoming server-initiated requests
-- [ ] Enforce `initialize` before any other client call
-- [ ] Prevent repeated `initialize` on the same connection
+- [x] Implement outbound request id generation
+- [x] Track pending requests and resolve responses
+- [x] Route notifications separately from responses
+- [x] Route incoming server-initiated requests
+- [x] Enforce `initialize` before any other client call
+- [x] Prevent repeated `initialize` on the same connection
 - [ ] Add timeout and cancellation support where appropriate
 
 ### 3. Generated Protocol Boundary
@@ -199,9 +202,9 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 ### 9. Testing
 
 - [x] Unit test message framing/parsing
-- [ ] Unit test request/response correlation
-- [ ] Unit test initialize gating
-- [ ] Unit test incoming server-request routing
+- [x] Unit test request/response correlation
+- [x] Unit test initialize gating
+- [x] Unit test incoming server-request routing
 - [ ] Fixture test streamed notification sequences
 - [ ] Integration test against a real `codex app-server --listen stdio://`
 - [ ] Add CI coverage for stale binding detection
@@ -220,7 +223,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 - [x] Scaffold package structure
 - [x] Implement `stdio` transport
-- [ ] Implement RPC session manager
+- [x] Implement RPC session manager
 - [ ] Add stable bindings and regeneration scripts
 - [ ] Implement initialize flow
 - [ ] Implement stable methods for thread, turn, command, and fs APIs
