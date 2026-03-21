@@ -34,6 +34,7 @@ The protocol details in this plan are derived from that README, including:
 - Added a first-pass `rpc/` session layer on top of transport with request id generation, pending request tracking, response correlation, notification routing, and incoming server-request routing.
 - Enforced the `initialize` -> `initialized` handshake in the RPC session so client-originated methods stay gated until startup completes.
 - Added focused unit coverage for request/response matching, initialize-state rules, incoming request routing, transport-close rejection, and protocol-error handling.
+- Added a repo-level stdio integration test that exercises a real `codex app-server` initialize handshake and `model/list` request.
 
 ## Architectural Direction
 
@@ -206,7 +207,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Unit test initialize gating
 - [x] Unit test incoming server-request routing
 - [ ] Fixture test streamed notification sequences
-- [ ] Integration test against a real `codex app-server --listen stdio://`
+- [x] Integration test against a real `codex app-server --listen stdio://`
 - [ ] Add CI coverage for stale binding detection
 
 ### 10. Packaging And Release
