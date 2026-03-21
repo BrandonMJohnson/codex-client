@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "generator": {
+    "name": "codex-cli",
+    "version": "codex-cli 0.116.0"
+  },
+  "artifacts": [
+    {
+      "flavor": "stable",
+      "experimental": false,
+      "typesDir": "src/generated/stable",
+      "schemaDir": "schemas/stable"
+    },
+    {
+      "flavor": "experimental",
+      "experimental": true,
+      "typesDir": "src/generated/experimental",
+      "schemaDir": "schemas/experimental"
+    }
+  ]
+}

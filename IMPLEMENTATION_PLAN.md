@@ -35,6 +35,10 @@ The protocol details in this plan are derived from that README, including:
 - Enforced the `initialize` -> `initialized` handshake in the RPC session so client-originated methods stay gated until startup completes.
 - Added focused unit coverage for request/response matching, initialize-state rules, incoming request routing, transport-close rejection, and protocol-error handling.
 - Added a repo-level stdio integration test that exercises a real `codex app-server` initialize handshake and `model/list` request.
+- Added committed stable and experimental generated protocol artifacts under `src/generated/` plus matching JSON Schema bundles under `schemas/`.
+- Added `bindings:generate` and `bindings:check` scripts that regenerate into temporary directories, normalize generator output for `NodeNext`, and record the `codex` CLI version in `src/generated/manifest.json`.
+- Added a handwritten `src/protocol/index.ts` boundary so runtime code can depend on curated protocol exports without reaching into generated files directly.
+- Added focused tests for the generation-script import normalization helper and validated the generation flow with `bindings:check`, `typecheck`, `build`, and the existing test suite.
 
 ## Architectural Direction
 
@@ -149,11 +153,11 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ### 3. Generated Protocol Boundary
 
-- [ ] Add generated stable bindings under `src/generated/stable`
-- [ ] Add generated experimental bindings under `src/generated/experimental`
-- [ ] Create `src/protocol/index.ts` to re-export curated types
-- [ ] Keep handwritten protocol helpers separate from generated files
-- [ ] Add a manifest file that records the generator version
+- [x] Add generated stable bindings under `src/generated/stable`
+- [x] Add generated experimental bindings under `src/generated/experimental`
+- [x] Create `src/protocol/index.ts` to re-export curated types
+- [x] Keep handwritten protocol helpers separate from generated files
+- [x] Add a manifest file that records the generator version
 
 ### 4. Stable Client API
 
@@ -225,7 +229,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Scaffold package structure
 - [x] Implement `stdio` transport
 - [x] Implement RPC session manager
-- [ ] Add stable bindings and regeneration scripts
+- [x] Add stable bindings and regeneration scripts
 - [ ] Implement initialize flow
 - [ ] Implement stable methods for thread, turn, command, and fs APIs
 - [ ] Implement event streaming
