@@ -92,6 +92,7 @@ Only after review and QA have both completed is the task considered done.
 
 Every meaningful code change must go through sub-agent code review.
 
+- The code review sub-agent should read [CODE_REVIEW_GUIDANCE.md](./CODE_REVIEW_GUIDANCE.md) before reviewing.
 - The task is not complete until a sub-agent has reviewed the change.
 - The agent should automatically run this review step as part of the normal workflow.
 - Do not ask the user whether code review should be run.
@@ -108,6 +109,7 @@ Every meaningful code change must go through sub-agent code review.
 
 After code review is complete, every meaningful code change must go through sub-agent QA.
 
+- The QA sub-agent should read [QA_GUIDANCE.md](./QA_GUIDANCE.md) before validating.
 - QA must be performed by a sub-agent after code review has finished.
 - The agent should automatically run this QA step after code review.
 - Do not ask the user whether QA should be run.
