@@ -39,6 +39,7 @@ The protocol details in this plan are derived from that README, including:
 - Added `bindings:generate` and `bindings:check` scripts that regenerate into temporary directories, normalize generator output for `NodeNext`, and record the `codex` CLI version in `src/generated/manifest.json`.
 - Added a handwritten `src/protocol/index.ts` boundary so runtime code can depend on curated protocol exports without reaching into generated files directly.
 - Added focused tests for the generation-script import normalization helper and validated the generation flow with `bindings:check`, `typecheck`, `build`, and the existing test suite.
+- Added a GitHub Actions workflow that installs the manifest-pinned `codex` CLI version and runs `bindings:check` on pushes to `main` and on pull requests.
 
 ## Architectural Direction
 
@@ -212,7 +213,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Unit test incoming server-request routing
 - [ ] Fixture test streamed notification sequences
 - [x] Integration test against a real `codex app-server --listen stdio://`
-- [ ] Add CI coverage for stale binding detection
+- [x] Add CI coverage for stale binding detection
 
 ### 10. Packaging And Release
 
@@ -248,7 +249,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 - [ ] Add ergonomic helper APIs
 - [ ] Improve docs and examples
-- [ ] Add stronger CI validation around generated bindings
+- [x] Add stronger CI validation around generated bindings
 - [ ] Finalize release packaging
 - [ ] Publish the package
 
