@@ -29,9 +29,8 @@ The protocol details in this plan are derived from that README, including:
 - Added the initial `transport/` module structure and a shared transport contract.
 - Implemented a first-pass `stdio` transport for newline-delimited JSON frames.
 - Added focused unit coverage for framing, chunked reads, malformed input, and lifecycle gating.
-- Current workflow blockers:
-  - This workspace is not yet a git repository, so the required commit-based review flow cannot run end-to-end.
-  - The repository workflow calls for sub-agent review and QA, but that requires an explicit delegation step before those passes can begin.
+- Aligned the build output layout with the published package entrypoints so `dist/index.js` resolves correctly.
+- Git is initialized, and the first transport slice has already gone through review and QA passes.
 
 ## Architectural Direction
 
