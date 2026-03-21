@@ -338,7 +338,7 @@ export class RpcSession {
     }
 
     this.#pendingRequests.clear();
-    this.#closeListeners.notify(closeError);
+    this.#closeListeners.notify(error);
   }
 
   #detachTransportListeners(): void {

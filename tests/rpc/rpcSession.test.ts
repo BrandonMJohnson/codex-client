@@ -256,6 +256,21 @@ describe("RpcSession", () => {
     expect(session.initializationState).toBe("closed");
   });
 
+  it("reports clean closes without an error payload", async () => {
+    const transport = new FakeTransport();
+    const session = new RpcSession({ transport });
+    const closeEvents: Array<Error | undefined> = [];
+
+    session.onClose((error) => {
+      closeEvents.push(error);
+    });
+
+    await session.start();
+    await session.close();
+
+    expect(closeEvents).toEqual([undefined]);
+  });
+
   it("forwards transport errors to session listeners", async () => {
     const transport = new FakeTransport();
     const session = new RpcSession({ transport });
