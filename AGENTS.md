@@ -88,6 +88,9 @@ Only after review and QA have both completed is the task considered done.
 Every meaningful code change must go through sub-agent code review.
 
 - The task is not complete until a sub-agent has reviewed the change.
+- The agent should automatically run this review step as part of the normal workflow.
+- Do not ask the user whether code review should be run.
+- Do not ask the user whether code review should be skipped or bypassed.
 - Review should focus on correctness, regressions, maintainability, edge cases, and missing tests.
 - Review is iterative, not ceremonial.
 - If the review identifies issues, fix them and repeat review as needed until the change is in good shape.
@@ -98,6 +101,9 @@ Every meaningful code change must go through sub-agent code review.
 After code review is complete, every meaningful code change must go through sub-agent QA.
 
 - QA must be performed by a sub-agent after code review has finished.
+- The agent should automatically run this QA step after code review.
+- Do not ask the user whether QA should be run.
+- Do not ask the user whether QA should be skipped or bypassed.
 - QA is also iterative.
 - If QA finds issues, fix them and run QA again until the change is ready.
 - QA should include automated validation where available.
@@ -135,6 +141,14 @@ A task is done only when all of the following are true:
 - QA findings have been addressed through an iterative fix-and-QA loop.
 - Exploratory testing has been performed when feasible, especially for real client behavior.
 - The implementation plan or related docs have been updated if needed.
+
+## Agent Behavior
+
+- The agent is expected to follow the review and QA cycle automatically.
+- The default workflow is implementation -> validation -> commit -> sub-agent review -> fixes -> sub-agent QA -> fixes -> completion.
+- The agent should not treat review and QA as optional steps.
+- The agent should not ask the user for permission to perform required review or QA passes.
+- The agent should only stop short of these steps if technically blocked, and in that case it should explain the blocker clearly.
 
 ## Working Style
 
