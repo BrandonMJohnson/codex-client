@@ -91,6 +91,9 @@ Every meaningful code change must go through sub-agent code review.
 - The agent should automatically run this review step as part of the normal workflow.
 - Do not ask the user whether code review should be run.
 - Do not ask the user whether code review should be skipped or bypassed.
+- The code reviewer must not make code changes directly.
+- The code reviewer is responsible for identifying issues, risks, regressions, and gaps, not for editing files.
+- Any fixes identified during review must be applied by the implementing agent, then re-reviewed as needed.
 - Review should focus on correctness, regressions, maintainability, edge cases, and missing tests.
 - Review is iterative, not ceremonial.
 - If the review identifies issues, fix them and repeat review as needed until the change is in good shape.
@@ -104,6 +107,9 @@ After code review is complete, every meaningful code change must go through sub-
 - The agent should automatically run this QA step after code review.
 - Do not ask the user whether QA should be run.
 - Do not ask the user whether QA should be skipped or bypassed.
+- The QA sub-agent must not make code changes directly.
+- The QA sub-agent is responsible for validation, testing, and issue discovery, not for editing files.
+- Any fixes identified during QA must be applied by the implementing agent, then re-validated as needed.
 - QA is also iterative.
 - If QA finds issues, fix them and run QA again until the change is ready.
 - QA should include automated validation where available.
@@ -176,3 +182,11 @@ Use the available MCP tools intentionally as part of normal project execution.
 - Use memory to support cleaner handoff between implementation, code review, and QA passes.
 - Prefer storing durable, high-value context rather than transient noise.
 - If a choice is likely to matter later, capture it.
+- Use memory as the running project ledger for meaningful work.
+- After each meaningful implementation chunk, record a concise summary of what changed.
+- Record commit hashes and what each commit represents when that context will help future handoff or traceability.
+- Record key code review findings, including what was flagged and how those issues were resolved.
+- Record key QA findings, including automated validation results, exploratory testing performed, and any fixes applied.
+- Record important follow-up items, known limitations, and unresolved risks when they remain after a task.
+- Keep entries compact and useful so future agents can quickly reconstruct recent history without digging through everything manually.
+- Memory should complement git history, code review, and QA artifacts, not replace them.
