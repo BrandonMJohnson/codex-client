@@ -35,9 +35,11 @@ type InitializationState =
   | "initialized"
   | "closed";
 
+// The server handshake requires an initialize request/response round-trip
+// before the client may send the initialized notification and unlock other RPCs.
 type PendingRequest = {
   readonly method: string;
-  readonly resolve: (value: JsonValue | undefined) => void;
+  readonly resolve: (value: JsonValue) => void;
   readonly reject: (reason: Error) => void;
 };
 
@@ -121,14 +123,14 @@ export class RpcSession {
   public async request(
     method: string,
     params?: JsonValue
-  ): Promise<JsonValue | undefined> {
+  ): Promise<JsonValue> {
     this.#ensureOpen();
     this.#prepareClientMethod(method);
 
     const id = this.#requestIdFactory();
     const message = createRequestMessage(id, method, params);
 
-    return await new Promise<JsonValue | undefined>((resolve, reject) => {
+    return await new Promise<JsonValue>((resolve, reject) => {
       this.#pendingRequests.set(id, {
         method,
         resolve,
@@ -169,8 +171,7 @@ export class RpcSession {
   public async respond(id: RpcId, result?: JsonValue): Promise<void> {
     this.#ensureOpen();
 
-    const message: RpcSuccessResponseMessage =
-      result === undefined ? { id } : { id, result };
+    const message = createSuccessResponseMessage(id, result);
 
     await this.#transport.send(asJsonValueObject(message));
   }
@@ -221,8 +222,10 @@ export class RpcSession {
           return;
       }
     } catch (error) {
-      this.#emitError(asError(error));
-      void this.close();
+      const rpcError = asError(error);
+      this.#emitError(rpcError);
+      this.#finalizeClose(rpcError);
+      void this.#transport.close();
     }
   };
 
@@ -335,7 +338,7 @@ export class RpcSession {
     }
 
     this.#pendingRequests.clear();
-    this.#closeListeners.notify(error);
+    this.#closeListeners.notify(closeError);
   }
 
   #detachTransportListeners(): void {
@@ -484,11 +487,10 @@ function createSuccessResponseMessage(
   id: RpcId,
   result?: JsonValue
 ): RpcSuccessResponseMessage {
-  if (result === undefined) {
-    return { id };
-  }
-
-  return { id, result };
+  return {
+    id,
+    result: result ?? null
+  };
 }
 
 function createErrorObject(

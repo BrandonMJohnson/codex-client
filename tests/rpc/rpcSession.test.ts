@@ -196,7 +196,7 @@ describe("RpcSession", () => {
     const requests: string[] = [];
     session.onRequest((request) => {
       requests.push(request.method);
-      void request.respond({ approved: true });
+      void request.respond();
     });
 
     transport.emitMessage({ method: "turn/started", params: { id: "turn-1" } });
@@ -213,12 +213,12 @@ describe("RpcSession", () => {
     expect(transport.sentMessages).toEqual([
       {
         id: "req-1",
-        result: { approved: true }
+        result: null
       }
     ]);
   });
 
-  it("rejects unknown response ids as protocol errors and closes the session", async () => {
+  it("rejects pending requests with the protocol error that closed the session", async () => {
     const transport = new FakeTransport();
     const session = new RpcSession({ transport });
     const errors: Error[] = [];
@@ -232,13 +232,15 @@ describe("RpcSession", () => {
     });
 
     await session.start();
+    const pendingInitialize = session.request("initialize");
     transport.emitMessage({ id: 99, result: null });
 
     expect(errors).toHaveLength(1);
     expect(errors[0]).toBeInstanceOf(RpcProtocolError);
+    await expect(pendingInitialize).rejects.toBe(errors[0]);
     expect(transport.state).toBe("closed");
     expect(session.initializationState).toBe("closed");
-    expect(closeEvents).toEqual([undefined]);
+    expect(closeEvents).toEqual([errors[0]]);
   });
 
   it("rejects pending requests when the transport closes", async () => {

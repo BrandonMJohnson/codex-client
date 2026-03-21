@@ -21,7 +21,7 @@ export interface RpcNotificationMessage {
 
 export interface RpcSuccessResponseMessage {
   readonly id: RpcId;
-  readonly result?: JsonValue;
+  readonly result: JsonValue;
 }
 
 export interface RpcErrorResponseMessage {
