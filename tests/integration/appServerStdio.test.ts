@@ -3,7 +3,7 @@ import { once } from "node:events";
 
 import { describe, expect, it } from "vitest";
 
-import { RpcSession, StdioTransport } from "../../src/index.js";
+import { AppServerClient, StdioTransport } from "../../src/index.js";
 
 const codexVersion = getCodexVersion();
 const itIfCodex = codexVersion === null ? it.skip : it;
@@ -27,16 +27,16 @@ describe("codex app-server stdio integration", () => {
         input: child.stdout,
         output: child.stdin
       });
-      const session = new RpcSession({ transport });
+      const client = new AppServerClient({ transport });
 
       try {
-        await session.start();
-
-        const initializeResult = await session.request("initialize", {
+        const initializeResult = await client.initialize({
           clientInfo: {
             name: "codex-app-server-client-tests",
-            version: codexVersion
-          }
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
         });
 
         expect(initializeResult).toEqual(
@@ -47,9 +47,7 @@ describe("codex app-server stdio integration", () => {
           })
         );
 
-        await session.initialized();
-
-        const modelList = await session.request("model/list", {});
+        const modelList = await client.modelList();
         expect(modelList).toEqual(
           expect.objectContaining({
             data: expect.arrayContaining([
@@ -62,7 +60,7 @@ describe("codex app-server stdio integration", () => {
           })
         );
 
-        await session.close();
+        await client.close();
         await waitForExit(child);
         expect(stderrChunks.join("")).toBe("");
       } finally {

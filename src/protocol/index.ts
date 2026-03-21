@@ -16,6 +16,7 @@ export type {
 } from "../generated/stable/index.js";
 
 export type {
+  AppInfo,
   AppsListParams,
   AppsListResponse,
   CommandExecParams,
@@ -24,8 +25,10 @@ export type {
   FsReadFileResponse,
   FsWriteFileParams,
   FsWriteFileResponse,
+  Model,
   ModelListParams,
   ModelListResponse,
+  SkillsListEntry,
   SkillsListParams,
   SkillsListResponse,
   ThreadStartParams,
