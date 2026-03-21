@@ -26,7 +26,9 @@ The project values the following, in order:
 - Keep generated code isolated from handwritten code.
 - Do not hand-edit generated bindings.
 - Prefer composition over monolithic classes when practical.
-- Add comments where they help a human understand intent, invariants, or non-obvious behavior.
+- Add comments anywhere a human reader would otherwise have to reverse-engineer intent, invariants, protocol assumptions, lifecycle rules, edge-case handling, or other non-obvious behavior.
+- Err on the side of documenting tricky logic, state transitions, parsing rules, and protocol-driven constraints.
+- Do not leave dense or subtle code blocks unexplained just because the code is technically correct.
 - Do not add noisy comments that restate obvious code.
 
 ## TypeScript Quality Standards
@@ -40,6 +42,9 @@ The project values the following, in order:
 - Keep function and file responsibilities narrow.
 - Prefer small helpers over deeply nested control flow.
 - Write code for humans first, then for machines.
+- If a piece of code is complicated enough to slow down a careful reviewer, it likely needs a clarifying comment.
+- Comments should explain why the code exists, what constraints it is honoring, and what assumptions must remain true.
+- Public-facing modules, protocol boundaries, and tricky internal helpers should have enough commentary that a new contributor can understand them without guesswork.
 
 ## Repository Organization
 
@@ -131,6 +136,7 @@ After code review is complete, every meaningful code change must go through sub-
 - Keep architecture and workflow documentation aligned with the codebase.
 - Document important invariants, tradeoffs, and gotchas near the code or in repo docs.
 - If a new script or workflow is introduced, explain how it should be used.
+- When code introduces non-obvious behavior, the explanation should live close to that code, not only in a separate document.
 
 ## Definition Of Done
 
@@ -138,6 +144,7 @@ A task is done only when all of the following are true:
 
 - The implementation is complete for the intended scope.
 - The code is clean, human-readable, and appropriately commented.
+- Complex or non-obvious code paths have comments that explain intent and constraints well enough for a future maintainer.
 - The change is broken into manageable git commits.
 - Relevant automated tests have been added or updated.
 - Relevant local validation has been run.
