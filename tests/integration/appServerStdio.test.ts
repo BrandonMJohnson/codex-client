@@ -16,6 +16,12 @@ import {
 
 const codexVersion = getCodexVersion();
 const itIfCodex = codexVersion === null ? it.skip : it;
+// Logging out mutates the caller's local Codex auth state, so keep that
+// end-to-end check opt-in for intentional manual coverage.
+const allowLiveLogoutTest =
+  process.env.CODEX_CLIENT_ALLOW_LIVE_LOGOUT_TEST === "1";
+const itIfCodexAndLiveLogout =
+  codexVersion === null || !allowLiveLogoutTest ? it.skip : it;
 
 type CommandExecOutputDeltaNotification = {
   method: "command/exec/outputDelta";
@@ -75,6 +81,189 @@ describe("codex app-server stdio integration", () => {
                 displayName: expect.any(String)
               })
             ])
+          })
+        );
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "reads account state and rate limits against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const account = await client.account.read();
+        expect(account).toEqual(
+          expect.objectContaining({
+            requiresOpenaiAuth: expect.any(Boolean)
+          })
+        );
+
+        if (account.account !== null) {
+          expect(account.account.type === "apiKey" || account.account.type === "chatgpt").toBe(
+            true
+          );
+
+          if (account.account.type === "chatgpt") {
+            expect(account.account).toEqual(
+              expect.objectContaining({
+                email: expect.any(String),
+                planType: expect.any(String)
+              })
+            );
+          }
+        }
+
+        const rateLimits = await client.account.rateLimitsRead();
+        expect(rateLimits.rateLimits).toHaveProperty("limitId");
+        expect(rateLimits.rateLimits).toHaveProperty("limitName");
+        expect(rateLimits.rateLimits).toHaveProperty("planType");
+
+        if (rateLimits.rateLimitsByLimitId !== null) {
+          expect(Object.keys(rateLimits.rateLimitsByLimitId).length).toBeGreaterThan(0);
+        }
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "starts and cancels a ChatGPT login flow against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const loginStart = await client.account.loginStart({
+          type: "chatgpt"
+        });
+
+        expect(loginStart).toEqual(
+          expect.objectContaining({
+            type: "chatgpt",
+            loginId: expect.any(String),
+            authUrl: expect.stringContaining("https://")
+          })
+        );
+
+        if (loginStart.type !== "chatgpt") {
+          throw new Error(
+            `Expected chatgpt login flow response, received ${loginStart.type}.`
+          );
+        }
+
+        const loginCancel = await client.account.loginCancel({
+          loginId: loginStart.loginId
+        });
+        expect(loginCancel).toEqual({
+          status: "canceled"
+        });
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodexAndLiveLogout(
+    "logs out the current account against a real app-server when CODEX_CLIENT_ALLOW_LIVE_LOGOUT_TEST=1",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        await expect(client.account.logout()).resolves.toEqual({});
+
+        const account = await client.account.read();
+        expect(account).toEqual(
+          expect.objectContaining({
+            account: null,
+            requiresOpenaiAuth: expect.any(Boolean)
           })
         );
 

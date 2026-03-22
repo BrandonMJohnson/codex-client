@@ -29,6 +29,13 @@ Run the real stdio integration coverage when `codex` is available locally:
 npm run test:integration
 ```
 
+Run the opt-in live logout integration only when you intentionally want the
+test to sign the local Codex session out:
+
+```bash
+CODEX_CLIENT_ALLOW_LIVE_LOGOUT_TEST=1 npm test -- --run tests/integration/appServerStdio.test.ts -t "logs out the current account"
+```
+
 ## Repository Workflow
 
 - `main` is the protected release branch.

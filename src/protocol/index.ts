@@ -16,9 +16,12 @@ export type {
 } from "../generated/stable/index.js";
 
 export type {
+  Account,
   AppInfo,
   AppsListParams,
   AppsListResponse,
+  CancelLoginAccountParams,
+  CancelLoginAccountResponse,
   CommandExecParams,
   CommandExecResizeParams,
   CommandExecResizeResponse,
@@ -42,6 +45,12 @@ export type {
   FsRemoveResponse,
   FsWriteFileParams,
   FsWriteFileResponse,
+  GetAccountParams,
+  GetAccountRateLimitsResponse,
+  GetAccountResponse,
+  LoginAccountParams,
+  LoginAccountResponse,
+  LogoutAccountResponse,
   Model,
   ModelListParams,
   ModelListResponse,
