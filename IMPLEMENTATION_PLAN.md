@@ -28,6 +28,7 @@ The protocol details in this plan are derived from that README, including:
 - Rewrote the README so it reads like an open source project entrypoint instead of an internal progress note, adding clearer positioning, requirements, quick-start usage, API overview, event-model documentation, approval/request examples, binding guidance, and contributor-oriented development instructions.
 - Aligned the implementation checklist with already-landed work by marking experimental bindings support, ergonomic helpers, and docs/examples progress more accurately.
 - Hardened package-consumer flows by whitelisting the published runtime/doc files, adding `prepare` / `prepack` build hooks, and adding a `package:check` smoke test that packs the library, installs it into a temporary consumer project, and verifies the main exports resolve from the installed tarball.
+- Reconciled the README install and artifact guidance with the current packaging behavior by documenting local-checkout usage separately from local-path/git consumption and clarifying that repository JSON Schemas are development artifacts rather than part of the current published package surface.
 
 ### 2026-03-21
 
@@ -283,7 +284,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Improve docs and examples
 - [x] Add stronger CI validation around generated bindings
 - [ ] Finalize release packaging
-- [ ] Reconcile README install guidance with the final packaging/install path after release packaging work lands
+- [x] Reconcile README install guidance with the final packaging/install path after release packaging work lands
 - [ ] Publish the package
 
 ## Open Decisions
