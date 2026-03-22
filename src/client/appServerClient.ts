@@ -6,9 +6,12 @@ import {
   type RpcNotificationMessage
 } from "../rpc/index.js";
 import type {
+  Account,
   AppInfo,
   AppsListParams,
   AppsListResponse,
+  CancelLoginAccountParams,
+  CancelLoginAccountResponse,
   CommandExecParams,
   CommandExecResizeParams,
   CommandExecResizeResponse,
@@ -27,6 +30,12 @@ import type {
   FsReadDirectoryResponse,
   InitializeParams,
   InitializeResponse,
+  GetAccountParams,
+  GetAccountRateLimitsResponse,
+  GetAccountResponse,
+  LoginAccountParams,
+  LoginAccountResponse,
+  LogoutAccountResponse,
   Model,
   ModelListParams,
   ModelListResponse,
@@ -61,6 +70,26 @@ import type {
 import type { JsonValue, Transport, TransportState } from "../transport/transport.js";
 
 type StableClientRequestMap = {
+  readonly "account/login/cancel": {
+    readonly params: CancelLoginAccountParams;
+    readonly response: CancelLoginAccountResponse;
+  };
+  readonly "account/login/start": {
+    readonly params: LoginAccountParams;
+    readonly response: LoginAccountResponse;
+  };
+  readonly "account/logout": {
+    readonly params: undefined;
+    readonly response: LogoutAccountResponse;
+  };
+  readonly "account/rateLimits/read": {
+    readonly params: undefined;
+    readonly response: GetAccountRateLimitsResponse;
+  };
+  readonly "account/read": {
+    readonly params: GetAccountParams;
+    readonly response: GetAccountResponse;
+  };
   readonly "app/list": {
     readonly params: AppsListParams;
     readonly response: AppsListResponse;
@@ -154,8 +183,36 @@ type StableClientRequestMap = {
 export type AppServerClientModel = Model;
 export type AppServerClientSkill = SkillsListEntry;
 export type AppServerClientApp = AppInfo;
+export type AppServerClientAccount = Account;
 export type AppServerClientThread = Thread;
 export type AppServerClientTurn = Turn;
+
+export interface AppServerClientAccountApi {
+  /**
+   * Read the currently active account session. The helper defaults
+   * `refreshToken` to `false` so callers opt into refresh work explicitly.
+   */
+  read(params?: GetAccountParams): Promise<GetAccountResponse>;
+  /**
+   * Start an account login flow for API keys, browser-based ChatGPT auth, or
+   * externally managed ChatGPT auth tokens.
+   */
+  loginStart(params: LoginAccountParams): Promise<LoginAccountResponse>;
+  /**
+   * Cancel a previously started browser-based ChatGPT login flow.
+   */
+  loginCancel(
+    params: CancelLoginAccountParams
+  ): Promise<CancelLoginAccountResponse>;
+  /**
+   * Clear any currently active account session from the server process.
+   */
+  logout(): Promise<LogoutAccountResponse>;
+  /**
+   * Read the current rate-limit snapshot for the active account session.
+   */
+  rateLimitsRead(): Promise<GetAccountRateLimitsResponse>;
+}
 
 export interface AppServerClientThreadApi {
   start(params: ThreadStartParams): Promise<ThreadStartResponse>;
@@ -285,6 +342,7 @@ export class AppServerClient {
   public readonly turn: AppServerClientTurnApi;
   public readonly command: AppServerClientCommandApi;
   public readonly fs: AppServerClientFsApi;
+  public readonly account: AppServerClientAccountApi;
 
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
@@ -323,6 +381,17 @@ export class AppServerClient {
         await this.#request("fs/readDirectory", params),
       remove: async (params) => await this.#request("fs/remove", params),
       copy: async (params) => await this.#request("fs/copy", params)
+    };
+    this.account = {
+      read: async (params = { refreshToken: false }) =>
+        await this.#request("account/read", params),
+      loginStart: async (params) =>
+        await this.#request("account/login/start", params),
+      loginCancel: async (params) =>
+        await this.#request("account/login/cancel", params),
+      logout: async () => await this.#request("account/logout", undefined),
+      rateLimitsRead: async () =>
+        await this.#request("account/rateLimits/read", undefined)
     };
   }
 

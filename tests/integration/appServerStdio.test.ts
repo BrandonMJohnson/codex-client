@@ -88,6 +88,76 @@ describe("codex app-server stdio integration", () => {
   );
 
   itIfCodex(
+    "reads account state and rate limits against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const account = await client.account.read();
+        expect(account).toEqual(
+          expect.objectContaining({
+            requiresOpenaiAuth: expect.any(Boolean)
+          })
+        );
+
+        if (account.account !== null) {
+          expect(account.account.type === "apiKey" || account.account.type === "chatgpt").toBe(
+            true
+          );
+
+          if (account.account.type === "chatgpt") {
+            expect(account.account).toEqual(
+              expect.objectContaining({
+                email: expect.any(String),
+                planType: expect.any(String)
+              })
+            );
+          }
+        }
+
+        const rateLimits = await client.account.rateLimitsRead();
+        expect(rateLimits.rateLimits).toHaveProperty("limitId");
+        expect(rateLimits.rateLimits).toHaveProperty("limitName");
+        expect(rateLimits.rateLimits).toHaveProperty("planType");
+
+        if (rateLimits.rateLimitsByLimitId !== null) {
+          expect(Object.keys(rateLimits.rateLimitsByLimitId).length).toBeGreaterThan(0);
+        }
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
     "starts a thread against a real app-server",
     async () => {
       const child = spawn("codex", ["app-server", "--listen", "stdio://"], {

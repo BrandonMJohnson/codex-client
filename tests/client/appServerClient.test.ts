@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type CancelLoginAccountResponse,
   type CommandExecResizeResponse,
   type CommandExecResponse,
   type CommandExecTerminateResponse,
@@ -13,10 +14,13 @@ import {
   type FsReadFileResponse,
   type FsRemoveResponse,
   type FsWriteFileResponse,
+  type GetAccountRateLimitsResponse,
+  type GetAccountResponse,
   RpcResponseError,
   RpcStateError,
   type InitializeParams,
   type JsonValue,
+  type LoginAccountResponse,
   type RpcNotificationMessage,
   type Thread,
   type ThreadReadResponse,
@@ -850,6 +854,103 @@ describe("AppServerClient", () => {
     });
     await expect(copy).resolves.toEqual(createEmptyFsResponse());
   });
+
+  it("routes account namespace helpers to the stable account RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const accountRead = client.account.read();
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "account/read",
+      params: {
+        refreshToken: false
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createGetAccountResponse() as JsonValue
+    });
+    await expect(accountRead).resolves.toEqual(createGetAccountResponse());
+
+    const accountLoginStart = client.account.loginStart({
+      type: "chatgpt"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "account/login/start",
+      params: {
+        type: "chatgpt"
+      }
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createLoginAccountResponse() as JsonValue
+    });
+    await expect(accountLoginStart).resolves.toEqual(createLoginAccountResponse());
+
+    const accountLoginCancel = client.account.loginCancel({
+      loginId: "login-1"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "account/login/cancel",
+      params: {
+        loginId: "login-1"
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createCancelLoginAccountResponse() as JsonValue
+    });
+    await expect(accountLoginCancel).resolves.toEqual(
+      createCancelLoginAccountResponse()
+    );
+
+    const accountLogout = client.account.logout();
+    await flushAsyncWork();
+    expect(transport.sentMessages[3]).toEqual({
+      id: 5,
+      method: "account/logout",
+      params: undefined
+    });
+    transport.emitMessage({
+      id: 5,
+      result: createLogoutAccountResponse() as JsonValue
+    });
+    await expect(accountLogout).resolves.toEqual(createLogoutAccountResponse());
+
+    const accountRateLimitsRead = client.account.rateLimitsRead();
+    await flushAsyncWork();
+    expect(transport.sentMessages[4]).toEqual({
+      id: 6,
+      method: "account/rateLimits/read",
+      params: undefined
+    });
+    transport.emitMessage({
+      id: 6,
+      result: createAccountRateLimitsResponse() as JsonValue
+    });
+    await expect(accountRateLimitsRead).resolves.toEqual(
+      createAccountRateLimitsResponse()
+    );
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -924,6 +1025,53 @@ function createEmptyCommandResponse():
 function createFsReadFileResponse(dataBase64: string): FsReadFileResponse {
   return {
     dataBase64
+  };
+}
+
+function createGetAccountResponse(): GetAccountResponse {
+  return {
+    account: {
+      type: "chatgpt",
+      email: "teammate@example.com",
+      planType: "plus"
+    },
+    requiresOpenaiAuth: false
+  };
+}
+
+function createLoginAccountResponse(): LoginAccountResponse {
+  return {
+    type: "chatgpt",
+    loginId: "login-1",
+    authUrl: "https://example.com/auth"
+  };
+}
+
+function createCancelLoginAccountResponse(): CancelLoginAccountResponse {
+  return {
+    status: "canceled"
+  };
+}
+
+function createLogoutAccountResponse() {
+  return {};
+}
+
+function createAccountRateLimitsResponse(): GetAccountRateLimitsResponse {
+  const sharedSnapshot = {
+    limitId: "codex",
+    limitName: "Codex",
+    primary: null,
+    secondary: null,
+    credits: null,
+    planType: "plus"
+  } as const;
+
+  return {
+    rateLimits: sharedSnapshot,
+    rateLimitsByLimitId: {
+      codex: sharedSnapshot
+    }
   };
 }
 
