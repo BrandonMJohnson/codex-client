@@ -88,6 +88,14 @@ A task is not complete just because code was written locally. The expected flow 
 
 Only after review and QA have both completed is the task considered done.
 
+## GitHub Repository Workflow
+
+- `main` is the protected branch.
+- Push feature work to a branch and land it through a pull request.
+- Keep required GitHub checks green before merge.
+- The baseline required checks are the `CI` workflow and the `Bindings` workflow.
+- Automation changes such as GitHub Actions, Dependabot, templates, or protection rules should be documented in repo guidance when they change contributor expectations.
+
 ## Required Code Review Process
 
 Every meaningful code change must go through sub-agent code review.
