@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientApprovalRequest,
   RpcResponseError,
   StdioTransport,
   type AppServerClientNotificationOf,
@@ -1001,24 +1002,14 @@ describe("codex app-server stdio integration", () => {
         | ((
             value: {
               requestId: string | number;
-              method:
-                | "applyPatchApproval"
-                | "execCommandApproval"
-                | "item/commandExecution/requestApproval"
-                | "item/fileChange/requestApproval"
-                | "item/permissions/requestApproval";
+              method: AppServerClientApprovalRequest["method"];
               params: Record<string, unknown>;
             }
           ) => void)
         | undefined;
       const approvalRequest = new Promise<{
         requestId: string | number;
-        method:
-          | "applyPatchApproval"
-          | "execCommandApproval"
-          | "item/commandExecution/requestApproval"
-          | "item/fileChange/requestApproval"
-          | "item/permissions/requestApproval";
+        method: AppServerClientApprovalRequest["method"];
         params: Record<string, unknown>;
       }>((resolve) => {
         settleApprovalRequest = resolve;
@@ -1054,69 +1045,32 @@ describe("codex app-server stdio integration", () => {
           resolvedNotifications.push(notification);
         });
 
-        const stopHandlers = [
-          client.handleRequest("applyPatchApproval", async (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "denied"
-            };
-          }),
-          client.handleRequest("execCommandApproval", async (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "denied"
-            };
-          }),
-          client.handleRequest(
-            "item/commandExecution/requestApproval",
-            async (request) => {
-              settleApprovalRequest?.({
-                requestId: request.id,
-                method: request.method,
-                params: request.params as Record<string, unknown>
-              });
-              settleApprovalRequest = undefined;
+        const stopApprovalHandlers = client.handleApprovals(async (request) => {
+          settleApprovalRequest?.({
+            requestId: request.id,
+            method: request.method,
+            params: request.params as Record<string, unknown>
+          });
+          settleApprovalRequest = undefined;
+
+          switch (request.method) {
+            case "applyPatchApproval":
+            case "execCommandApproval":
+              return {
+                decision: "denied"
+              };
+            case "item/commandExecution/requestApproval":
+            case "item/fileChange/requestApproval":
               return {
                 decision: "decline"
               };
-            }
-          ),
-          client.handleRequest("item/fileChange/requestApproval", async (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "decline"
-            };
-          }),
-          client.handleRequest(
-            "item/permissions/requestApproval",
-            async (request) => {
-              settleApprovalRequest?.({
-                requestId: request.id,
-                method: request.method,
-                params: request.params as Record<string, unknown>
-              });
-              settleApprovalRequest = undefined;
-            return {
-              permissions: {},
-              scope: "turn"
-            };
-          })
-        ];
+            case "item/permissions/requestApproval":
+              return {
+                permissions: {},
+                scope: "turn"
+              };
+          }
+        });
 
         const modelList = await client.modelList({ includeHidden: true });
         const preferredModel = selectPreferredIntegrationModel(modelList.data);
@@ -1205,9 +1159,7 @@ describe("codex app-server stdio integration", () => {
           })
         );
 
-        stopHandlers.forEach((stop) => {
-          stop();
-        });
+        stopApprovalHandlers();
         await client.close();
         await waitForExit(child);
       } finally {

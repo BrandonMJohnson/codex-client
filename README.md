@@ -78,6 +78,38 @@ fails after the thread has already been created, the helper rejects with
 `AppServerClientThreadRunError`, which carries the successful `thread/start`
 result so callers can recover the created thread id.
 
+## Approval Helper
+
+`client.handleApprovals()` wires the approval-style server request methods into
+one callback.
+
+```ts
+const stopApprovals = client.handleApprovals(async (request) => {
+  if (request.method === "item/permissions/requestApproval") {
+    await request.respond({
+      permissions: {},
+      scope: "turn"
+    });
+    return;
+  }
+
+  switch (request.method) {
+    case "applyPatchApproval":
+    case "execCommandApproval":
+      return { decision: "denied" };
+    case "item/commandExecution/requestApproval":
+    case "item/fileChange/requestApproval":
+      return { decision: "decline" };
+  }
+});
+```
+
+The helper covers the legacy `applyPatchApproval` and `execCommandApproval`
+requests plus the current `item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval`, and `item/permissions/requestApproval`
+methods. Callers can still use `onServerRequest()` and `handleRequest()` when
+they need low-level per-method control.
+
 ## Local Development
 
 Install dependencies:

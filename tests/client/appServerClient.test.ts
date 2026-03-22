@@ -2,20 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientApprovalRequest,
+  type AppServerClientApprovalResponse,
   AppServerClientThreadRunError,
   type AppServerClientInboundRequest,
-  type ApplyPatchApprovalResponse,
   type AppServerClientNotificationOf,
   type ChatgptAuthTokensRefreshResponse,
   type CancelLoginAccountResponse,
-  type CommandExecutionRequestApprovalResponse,
   type CommandExecResizeResponse,
   type CommandExecResponse,
   type CommandExecTerminateResponse,
   type CommandExecWriteResponse,
   type DynamicToolCallResponse,
-  type ExecCommandApprovalResponse,
-  type FileChangeRequestApprovalResponse,
   type FsCopyResponse,
   type FsCreateDirectoryResponse,
   type FsGetMetadataResponse,
@@ -33,7 +31,6 @@ import {
   type JsonValue,
   type LoginAccountResponse,
   type McpServerElicitationRequestResponse,
-  type PermissionsRequestApprovalResponse,
   type RpcNotificationMessage,
   type Thread,
   type ThreadReadResponse,
@@ -666,44 +663,46 @@ describe("AppServerClient", () => {
     ]);
   });
 
-  it("auto-responds from typed request handlers with exact protocol shapes", async () => {
+  it("routes approval requests through one handler with exact protocol shapes", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
+    const approvalMethods: AppServerClientApprovalRequest["method"][] = [];
 
-    client.handleRequest(
-      "applyPatchApproval",
-      (): ApplyPatchApprovalResponse => ({
-        decision: "approved"
-      })
-    );
-    client.handleRequest(
-      "execCommandApproval",
-      (): ExecCommandApprovalResponse => ({
-        decision: "approved_for_session"
-      })
-    );
-    client.handleRequest(
-      "item/commandExecution/requestApproval",
-      async (): Promise<CommandExecutionRequestApprovalResponse> => ({
-        decision: "accept"
-      })
-    );
-    client.handleRequest(
-      "item/fileChange/requestApproval",
-      (): FileChangeRequestApprovalResponse => ({
-        decision: "decline"
-      })
-    );
-    client.handleRequest(
-      "item/permissions/requestApproval",
-      (): PermissionsRequestApprovalResponse => ({
-        permissions: {
-          network: {
-            enabled: true
-          }
-        },
-        scope: "turn"
-      })
+    client.handleApprovals(
+      async (request): Promise<AppServerClientApprovalResponse | void> => {
+        approvalMethods.push(request.method);
+
+        if (request.method === "item/permissions/requestApproval") {
+          await request.respond({
+            permissions: {
+              network: {
+                enabled: true
+              }
+            },
+            scope: "turn"
+          });
+          return;
+        }
+
+        switch (request.method) {
+          case "applyPatchApproval":
+            return {
+              decision: "approved"
+            };
+          case "execCommandApproval":
+            return {
+              decision: "approved_for_session"
+            };
+          case "item/commandExecution/requestApproval":
+            return {
+              decision: "accept"
+            };
+          case "item/fileChange/requestApproval":
+            return {
+              decision: "decline"
+            };
+        }
+      }
     );
     client.handleRequest("item/tool/call", (): DynamicToolCallResponse => ({
       success: true,
@@ -859,75 +858,133 @@ describe("AppServerClient", () => {
 
     await flushAsyncWork();
 
-    expect(transport.sentMessages).toEqual([
-      {
-        id: "req-apply-patch",
-        result: {
-          decision: "approved"
-        }
-      },
-      {
-        id: "req-exec-command",
-        result: {
-          decision: "approved_for_session"
-        }
-      },
-      {
-        id: "req-approval",
-        result: {
-          decision: "accept"
-        }
-      },
-      {
-        id: "req-file",
-        result: {
-          decision: "decline"
-        }
-      },
-      {
-        id: "req-permissions",
-        result: {
-          permissions: {
-            network: {
-              enabled: true
-            }
-          },
-          scope: "turn"
-        }
-      },
-      {
-        id: "req-tool",
-        result: {
-          success: true,
-          contentItems: []
-        }
-      },
-      {
-        id: "req-elicitation",
-        result: {
-          action: "accept",
-          content: {
-            answer: "yes"
-          },
-          _meta: null
-        }
-      },
-      {
-        id: "req-user-input",
-        result: {
-          answers: {
-            question_1: {
-              answers: ["Recommended"]
+    expect(approvalMethods).toEqual([
+      "applyPatchApproval",
+      "execCommandApproval",
+      "item/commandExecution/requestApproval",
+      "item/fileChange/requestApproval",
+      "item/permissions/requestApproval"
+    ]);
+
+    expect(transport.sentMessages).toHaveLength(9);
+    expect(transport.sentMessages).toEqual(
+      expect.arrayContaining([
+        {
+          id: "req-apply-patch",
+          result: {
+            decision: "approved"
+          }
+        },
+        {
+          id: "req-exec-command",
+          result: {
+            decision: "approved_for_session"
+          }
+        },
+        {
+          id: "req-approval",
+          result: {
+            decision: "accept"
+          }
+        },
+        {
+          id: "req-file",
+          result: {
+            decision: "decline"
+          }
+        },
+        {
+          id: "req-permissions",
+          result: {
+            permissions: {
+              network: {
+                enabled: true
+              }
+            },
+            scope: "turn"
+          }
+        },
+        {
+          id: "req-tool",
+          result: {
+            success: true,
+            contentItems: []
+          }
+        },
+        {
+          id: "req-elicitation",
+          result: {
+            action: "accept",
+            content: {
+              answer: "yes"
+            },
+            _meta: null
+          }
+        },
+        {
+          id: "req-user-input",
+          result: {
+            answers: {
+              question_1: {
+                answers: ["Recommended"]
+              }
             }
           }
+        },
+        {
+          id: "req-refresh",
+          result: {
+            accessToken: "token",
+            chatgptAccountId: "acct-1",
+            chatgptPlanType: "pro"
+          }
         }
-      },
+      ])
+    );
+  });
+
+  it("responds with an internal error when an approval handler throws", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    client.handleApprovals(() => {
+      throw new Error("approval handler exploded");
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-approval-error",
+      method: "applyPatchApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "patch-1",
+        fileChanges: {},
+        reason: null,
+        grantRoot: null
+      }
+    });
+
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages).toEqual([
       {
-        id: "req-refresh",
-        result: {
-          accessToken: "token",
-          chatgptAccountId: "acct-1",
-          chatgptPlanType: "pro"
+        id: "req-approval-error",
+        error: {
+          code: -32603,
+          message: "approval handler exploded"
         }
       }
     ]);

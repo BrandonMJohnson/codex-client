@@ -18,6 +18,14 @@ import {
   type AppServerClientThreadRunOptions,
   type AppServerClientThreadRunResult
 } from "./threadRun.js";
+import {
+  APPROVAL_REQUEST_METHODS,
+  type AppServerClientApprovalRequest,
+  type AppServerClientApprovalRequestHandler,
+  type AppServerClientApprovalRequestMethod,
+  type AppServerClientApprovalResponse,
+  type AppServerClientApprovalResponseOf
+} from "./approvalHandling.js";
 import type {
   Account,
   AppInfo,
@@ -800,6 +808,88 @@ export class AppServerClient {
     };
   }
 
+  /**
+   * Register one callback for the approval-style server request methods that
+   * app-server emits during risky operations.
+   *
+   * The handler can return the protocol response directly or call
+   * `request.respond(...)` manually if it needs to make the response decision
+   * later. This keeps the helper ergonomic while still preserving the lower-
+   * level request APIs for callers that need full control.
+   */
+  public handleApprovals(
+    handler: AppServerClientApprovalRequestHandler
+  ): () => void {
+    for (const method of APPROVAL_REQUEST_METHODS) {
+      if (this.#autoHandledRequestMethods.has(method)) {
+        throw new RpcStateError(
+          `Cannot register more than one auto-handler for server request "${method}".`
+        );
+      }
+    }
+
+    for (const method of APPROVAL_REQUEST_METHODS) {
+      this.#autoHandledRequestMethods.add(method);
+    }
+
+    const unsubscribe = this.#session.onRequest((request) => {
+      if (!isApprovalRequestMethod(request.method)) {
+        return;
+      }
+
+      const wrapper = this.#createTypedRequestWrapper(request.method, request);
+      let resultPromise: Promise<AppServerClientApprovalResponse | void>;
+
+      try {
+        resultPromise = Promise.resolve(
+          handler(wrapper.request as AppServerClientApprovalRequest)
+        );
+      } catch (error) {
+        resultPromise = Promise.reject(error);
+      }
+
+      void resultPromise
+        .then(async (result) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          if (result === undefined) {
+            await wrapper.request.respondError({
+              code: INTERNAL_RPC_ERROR_CODE,
+              message:
+                "Approval handler must return a response or call request.respond()."
+            });
+            return;
+          }
+
+          await wrapper.request.respond(
+            result as AppServerClientApprovalResponseOf<
+              typeof request.method
+            >
+          );
+        })
+        .catch(async (error: unknown) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respondError({
+            code: INTERNAL_RPC_ERROR_CODE,
+            message: asError(error).message
+          });
+        });
+    });
+
+    return () => {
+      for (const method of APPROVAL_REQUEST_METHODS) {
+        this.#autoHandledRequestMethods.delete(method);
+      }
+
+      unsubscribe();
+    };
+  }
+
   public onError(listener: (error: Error) => void): () => void {
     return this.#session.onError(listener);
   }
@@ -915,6 +1005,12 @@ export class AppServerClient {
       wasResponded: () => responded
     };
   }
+}
+
+function isApprovalRequestMethod(
+  method: string
+): method is AppServerClientApprovalRequestMethod {
+  return (APPROVAL_REQUEST_METHODS as readonly string[]).includes(method);
 }
 
 function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
