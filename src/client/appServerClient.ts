@@ -27,10 +27,14 @@ import type {
   ThreadResumeParams,
   ThreadResumeResponse,
   Turn,
+  TurnInterruptParams,
+  TurnInterruptResponse,
   ThreadStartParams,
   ThreadStartResponse,
   TurnStartParams,
-  TurnStartResponse
+  TurnStartResponse,
+  TurnSteerParams,
+  TurnSteerResponse
 } from "../protocol/index.js";
 import type { JsonValue, Transport, TransportState } from "../transport/transport.js";
 
@@ -71,6 +75,14 @@ type StableClientRequestMap = {
     readonly params: TurnStartParams;
     readonly response: TurnStartResponse;
   };
+  readonly "turn/steer": {
+    readonly params: TurnSteerParams;
+    readonly response: TurnSteerResponse;
+  };
+  readonly "turn/interrupt": {
+    readonly params: TurnInterruptParams;
+    readonly response: TurnInterruptResponse;
+  };
 };
 
 export type AppServerClientModel = Model;
@@ -103,6 +115,17 @@ export interface AppServerClientTurnApi {
    * for completion.
    */
   start(params: TurnStartParams): Promise<TurnStartResponse>;
+  /**
+   * Steer adds more user input to the currently active turn. Callers must pass
+   * the active turn id they expect so the server can reject stale steering
+   * attempts after the turn has already advanced or completed.
+   */
+  steer(params: TurnSteerParams): Promise<TurnSteerResponse>;
+  /**
+   * Interrupt asks the server to stop an in-progress turn. Completion still
+   * arrives asynchronously via later notifications or a follow-up thread read.
+   */
+  interrupt(params: TurnInterruptParams): Promise<TurnInterruptResponse>;
 }
 
 export interface AppServerClientOptions {
@@ -142,7 +165,9 @@ export class AppServerClient {
         await this.#request("thread/loaded/list", params)
     };
     this.turn = {
-      start: async (params) => await this.#request("turn/start", params)
+      start: async (params) => await this.#request("turn/start", params),
+      steer: async (params) => await this.#request("turn/steer", params),
+      interrupt: async (params) => await this.#request("turn/interrupt", params)
     };
   }
 
