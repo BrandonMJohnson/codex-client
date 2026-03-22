@@ -546,11 +546,11 @@ describe("codex app-server stdio integration", () => {
             value: {
               requestId: string | number;
               method:
+                | "applyPatchApproval"
+                | "execCommandApproval"
                 | "item/commandExecution/requestApproval"
                 | "item/fileChange/requestApproval"
-                | "item/permissions/requestApproval"
-                | "item/tool/call"
-                | "mcpServer/elicitation/request";
+                | "item/permissions/requestApproval";
               params: Record<string, unknown>;
             }
           ) => void)
@@ -558,11 +558,11 @@ describe("codex app-server stdio integration", () => {
       const approvalRequest = new Promise<{
         requestId: string | number;
         method:
+          | "applyPatchApproval"
+          | "execCommandApproval"
           | "item/commandExecution/requestApproval"
           | "item/fileChange/requestApproval"
-          | "item/permissions/requestApproval"
-          | "item/tool/call"
-          | "mcpServer/elicitation/request";
+          | "item/permissions/requestApproval";
         params: Record<string, unknown>;
       }>((resolve) => {
         settleApprovalRequest = resolve;
@@ -599,6 +599,28 @@ describe("codex app-server stdio integration", () => {
         });
 
         const stopHandlers = [
+          client.handleRequest("applyPatchApproval", async (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "denied"
+            };
+          }),
+          client.handleRequest("execCommandApproval", async (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "denied"
+            };
+          }),
           client.handleRequest(
             "item/commandExecution/requestApproval",
             async (request) => {
@@ -633,35 +655,9 @@ describe("codex app-server stdio integration", () => {
                 params: request.params as Record<string, unknown>
               });
               settleApprovalRequest = undefined;
-              return {
-                permissions: {},
-                scope: "turn"
-              };
-            }
-          ),
-          client.handleRequest("item/tool/call", async (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
             return {
-              success: false,
-              contentItems: []
-            };
-          }),
-          client.handleRequest("mcpServer/elicitation/request", async (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              action: "decline",
-              content: null,
-              _meta: null
+              permissions: {},
+              scope: "turn"
             };
           })
         ];
@@ -693,11 +689,22 @@ describe("codex app-server stdio integration", () => {
 
         const request = await waitForApprovalRequest(approvalRequest);
 
-        expect(request.method).toMatch(/requestApproval|item\/tool\/call|elicitation/);
+        expect(request.method).toMatch(/Approval$|requestApproval$/);
         expect(request.params.threadId).toBe(threadStart.thread.id);
 
         if ("turnId" in request.params) {
           expect(request.params.turnId).toBe(turnStart.turn.id);
+        }
+
+        if (request.method === "applyPatchApproval") {
+          expect(request.params.conversationId).toBe(threadStart.thread.id);
+          expect(request.params.fileChanges).toEqual(expect.any(Object));
+        }
+
+        if (request.method === "execCommandApproval") {
+          expect(request.params.conversationId).toBe(threadStart.thread.id);
+          expect(request.params.command).toEqual(expect.any(Array));
+          expect(request.params.cwd).toBe(process.cwd());
         }
 
         if (request.method === "item/commandExecution/requestApproval") {
@@ -1242,21 +1249,21 @@ async function waitForApprovalRequest(
   request: Promise<{
     requestId: string | number;
     method:
+      | "applyPatchApproval"
+      | "execCommandApproval"
       | "item/commandExecution/requestApproval"
       | "item/fileChange/requestApproval"
-      | "item/permissions/requestApproval"
-      | "item/tool/call"
-      | "mcpServer/elicitation/request";
+      | "item/permissions/requestApproval";
     params: Record<string, unknown>;
   }>
 ): Promise<{
   requestId: string | number;
   method:
+    | "applyPatchApproval"
+    | "execCommandApproval"
     | "item/commandExecution/requestApproval"
     | "item/fileChange/requestApproval"
-    | "item/permissions/requestApproval"
-    | "item/tool/call"
-    | "mcpServer/elicitation/request";
+    | "item/permissions/requestApproval";
   params: Record<string, unknown>;
 }> {
   return await Promise.race([
