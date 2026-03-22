@@ -16,13 +16,16 @@ function resolveBase(): string {
   return "/";
 }
 
+const base = resolveBase();
+
 export default defineConfig({
   title: "codex-app-server-client",
   description: "A typed TypeScript client for codex app-server.",
-  base: resolveBase(),
+  base,
   cleanUrls: true,
   lastUpdated: true,
   lang: "en-US",
+  head: [["link", { rel: "icon", href: `${base}favicon.svg` }]],
   themeConfig: {
     siteTitle: "codex-app-server-client",
     nav: [
