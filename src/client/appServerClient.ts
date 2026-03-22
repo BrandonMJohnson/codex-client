@@ -1,5 +1,6 @@
 import {
   RpcSession,
+  type RpcErrorObject,
   RpcStateError,
   type RpcId,
   type RpcInboundRequest,
@@ -12,6 +13,8 @@ import type {
   AppsListResponse,
   CancelLoginAccountParams,
   CancelLoginAccountResponse,
+  ChatgptAuthTokensRefreshParams,
+  ChatgptAuthTokensRefreshResponse,
   CommandExecParams,
   CommandExecResizeParams,
   CommandExecResizeResponse,
@@ -20,6 +23,12 @@ import type {
   CommandExecTerminateResponse,
   CommandExecWriteParams,
   CommandExecWriteResponse,
+  CommandExecutionRequestApprovalParams,
+  CommandExecutionRequestApprovalResponse,
+  DynamicToolCallParams,
+  DynamicToolCallResponse,
+  FileChangeRequestApprovalParams,
+  FileChangeRequestApprovalResponse,
   FsCopyParams,
   FsCopyResponse,
   FsCreateDirectoryParams,
@@ -36,9 +45,13 @@ import type {
   LoginAccountParams,
   LoginAccountResponse,
   LogoutAccountResponse,
+  McpServerElicitationRequestParams,
+  McpServerElicitationRequestResponse,
   Model,
   ModelListParams,
   ModelListResponse,
+  PermissionsRequestApprovalParams,
+  PermissionsRequestApprovalResponse,
   FsReadFileParams,
   FsReadFileResponse,
   FsRemoveParams,
@@ -48,7 +61,12 @@ import type {
   SkillsListEntry,
   SkillsListParams,
   SkillsListResponse,
+  ApplyPatchApprovalParams,
+  ApplyPatchApprovalResponse,
+  ExecCommandApprovalParams,
+  ExecCommandApprovalResponse,
   ServerNotification,
+  ServerRequest,
   Thread,
   ThreadListParams,
   ThreadListResponse,
@@ -63,6 +81,8 @@ import type {
   TurnInterruptResponse,
   ThreadStartParams,
   ThreadStartResponse,
+  ToolRequestUserInputParams,
+  ToolRequestUserInputResponse,
   TurnStartParams,
   TurnStartResponse,
   TurnSteerParams,
@@ -181,6 +201,45 @@ type StableClientRequestMap = {
   };
 };
 
+type StableServerRequestMap = {
+  readonly "account/chatgptAuthTokens/refresh": {
+    readonly params: ChatgptAuthTokensRefreshParams;
+    readonly response: ChatgptAuthTokensRefreshResponse;
+  };
+  readonly applyPatchApproval: {
+    readonly params: ApplyPatchApprovalParams;
+    readonly response: ApplyPatchApprovalResponse;
+  };
+  readonly execCommandApproval: {
+    readonly params: ExecCommandApprovalParams;
+    readonly response: ExecCommandApprovalResponse;
+  };
+  readonly "item/commandExecution/requestApproval": {
+    readonly params: CommandExecutionRequestApprovalParams;
+    readonly response: CommandExecutionRequestApprovalResponse;
+  };
+  readonly "item/fileChange/requestApproval": {
+    readonly params: FileChangeRequestApprovalParams;
+    readonly response: FileChangeRequestApprovalResponse;
+  };
+  readonly "item/permissions/requestApproval": {
+    readonly params: PermissionsRequestApprovalParams;
+    readonly response: PermissionsRequestApprovalResponse;
+  };
+  readonly "item/tool/call": {
+    readonly params: DynamicToolCallParams;
+    readonly response: DynamicToolCallResponse;
+  };
+  readonly "item/tool/requestUserInput": {
+    readonly params: ToolRequestUserInputParams;
+    readonly response: ToolRequestUserInputResponse;
+  };
+  readonly "mcpServer/elicitation/request": {
+    readonly params: McpServerElicitationRequestParams;
+    readonly response: McpServerElicitationRequestResponse;
+  };
+};
+
 export type AppServerClientModel = Model;
 export type AppServerClientSkill = SkillsListEntry;
 export type AppServerClientApp = AppInfo;
@@ -192,6 +251,29 @@ export type AppServerClientEventMethod = AppServerClientNotification["method"];
 export type AppServerClientNotificationOf<
   Method extends AppServerClientEventMethod
 > = Extract<AppServerClientNotification, { method: Method }>;
+export type AppServerClientRequest = ServerRequest;
+export type AppServerClientRequestMethod = keyof StableServerRequestMap;
+export type AppServerClientRequestOf<Method extends AppServerClientRequestMethod> =
+  Extract<AppServerClientRequest, { method: Method }>;
+export type AppServerClientRequestResponseOf<
+  Method extends AppServerClientRequestMethod
+> = StableServerRequestMap[Method]["response"];
+export type AppServerClientInboundRequest<
+  Method extends AppServerClientRequestMethod
+> = {
+  readonly id: AppServerClientRequestOf<Method>["id"];
+  readonly method: Method;
+  readonly params: StableServerRequestMap[Method]["params"];
+  respond(result: StableServerRequestMap[Method]["response"]): Promise<void>;
+  respondError(error: RpcErrorObject): Promise<void>;
+};
+export type AppServerClientRequestHandler<
+  Method extends AppServerClientRequestMethod
+> = (
+  request: AppServerClientInboundRequest<Method>
+) =>
+  | AppServerClientRequestResponseOf<Method>
+  | Promise<AppServerClientRequestResponseOf<Method>>;
 
 export interface AppServerClientAccountApi {
   /**
@@ -336,7 +418,16 @@ export interface AppServerClientInitializeOptions {
   readonly sendInitialized?: boolean;
 }
 
+const INTERNAL_RPC_ERROR_CODE = -32603;
+
+type TypedRequestWrapper<Method extends AppServerClientRequestMethod> = {
+  readonly request: AppServerClientInboundRequest<Method>;
+  readonly wasResponded: () => boolean;
+};
+
 export class AppServerClient {
+  readonly #autoHandledRequestMethods =
+    new Set<AppServerClientRequestMethod>();
   readonly #session: RpcSession;
 
   #initializeParams: InitializeParams | undefined;
@@ -501,6 +592,82 @@ export class AppServerClient {
     return this.#session.onRequest(listener);
   }
 
+  /**
+   * Subscribe to a specific server-initiated request method with generated
+   * payload typing while keeping manual control over the response lifecycle.
+   */
+  public onServerRequest<Method extends AppServerClientRequestMethod>(
+    method: Method,
+    listener: (request: AppServerClientInboundRequest<Method>) => void
+  ): () => void {
+    return this.#session.onRequest((request) => {
+      if (request.method !== method) {
+        return;
+      }
+
+      listener(this.#createTypedRequestWrapper(method, request).request);
+    });
+  }
+
+  /**
+   * Register a convenience handler that automatically responds to matching
+   * server requests with the generated response type for that method.
+   *
+   * Only one auto-handler may be active per method at a time so the client
+   * cannot emit multiple JSON-RPC replies for the same inbound request.
+   */
+  public handleRequest<Method extends AppServerClientRequestMethod>(
+    method: Method,
+    handler: AppServerClientRequestHandler<Method>
+  ): () => void {
+    if (this.#autoHandledRequestMethods.has(method)) {
+      throw new RpcStateError(
+        `Cannot register more than one auto-handler for server request "${method}".`
+      );
+    }
+
+    this.#autoHandledRequestMethods.add(method);
+
+    const unsubscribe = this.#session.onRequest((request) => {
+      if (request.method !== method) {
+        return;
+      }
+
+      const wrapper = this.#createTypedRequestWrapper(method, request);
+      let resultPromise: Promise<AppServerClientRequestResponseOf<Method>>;
+
+      try {
+        resultPromise = Promise.resolve(handler(wrapper.request));
+      } catch (error) {
+        resultPromise = Promise.reject(error);
+      }
+
+      void resultPromise
+        .then(async (result) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respond(result);
+        })
+        .catch(async (error: unknown) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respondError({
+            code: INTERNAL_RPC_ERROR_CODE,
+            message: asError(error).message
+          });
+        });
+    });
+
+    return () => {
+      this.#autoHandledRequestMethods.delete(method);
+      unsubscribe();
+    };
+  }
+
   public onError(listener: (error: Error) => void): () => void {
     return this.#session.onError(listener);
   }
@@ -577,6 +744,40 @@ export class AppServerClient {
       throw new RpcStateError(`Cannot ${action} after the client has closed.`);
     }
   }
+
+  #createTypedRequestWrapper<Method extends AppServerClientRequestMethod>(
+    method: Method,
+    request: RpcInboundRequest
+  ): TypedRequestWrapper<Method> {
+    let responded = false;
+
+    const assertCanRespond = (): void => {
+      if (responded) {
+        throw new RpcStateError(
+          `Cannot respond to server request "${method}" more than once.`
+        );
+      }
+
+      responded = true;
+    };
+
+    return {
+      request: {
+        id: request.id,
+        method,
+        params: request.params as StableServerRequestMap[Method]["params"],
+        respond: async (result) => {
+          assertCanRespond();
+          await request.respond(result as JsonValue);
+        },
+        respondError: async (error) => {
+          assertCanRespond();
+          await request.respondError(error);
+        }
+      },
+      wasResponded: () => responded
+    };
+  }
 }
 
 function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
@@ -614,4 +815,8 @@ function isJsonObject(
   value: JsonValue
 ): value is { readonly [key: string]: JsonValue } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
