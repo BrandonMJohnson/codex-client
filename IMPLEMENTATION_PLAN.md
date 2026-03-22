@@ -64,8 +64,8 @@ The protocol details in this plan are derived from that README, including:
 - Added focused unit coverage for pre-response event buffering and notification-opt-out tolerance in the helper, plus a real stdio integration check that validates the helper against a live `codex app-server`.
 - Added a first-pass `client.thread.run()` ergonomic helper that starts a thread and immediately runs the initial turn on it, returning both the `thread/start` response and the streamed turn result.
 - Added focused unit coverage and a real stdio integration check for the thread helper so the composed thread+turn flow stays covered end to end.
-- Added a first-pass `client.handleApprovals()` ergonomic helper that wires the approval-style server request methods into one callback while preserving the low-level request APIs.
-- Added focused unit coverage and a real stdio integration check for the approval helper, including the mixed legacy/current approval request methods and manual response handling.
+- Added a first-pass `client.handleApprovals()` ergonomic helper that wires the approval-style server request methods into one typed handler object while preserving the low-level request APIs.
+- Added focused unit coverage and a real stdio integration check for the approval helper, including the mixed legacy/current approval request methods.
 
 ## Architectural Direction
 

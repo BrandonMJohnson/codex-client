@@ -11,7 +11,6 @@ import type {
   PermissionsRequestApprovalResponse
 } from "../protocol/index.js";
 import type { RequestId } from "../protocol/index.js";
-import type { RpcErrorObject } from "../rpc/index.js";
 
 type ApprovalRequestMap = {
   readonly applyPatchApproval: {
@@ -62,10 +61,6 @@ export type AppServerClientApprovalRequestOf<
   readonly id: RequestId;
   readonly method: Method;
   readonly params: ApprovalRequestMap[Method]["params"];
-  respond(
-    result: AppServerClientApprovalResponseOf<Method>
-  ): Promise<void>;
-  respondError(error: RpcErrorObject): Promise<void>;
 };
 
 export type AppServerClientApprovalRequest =
@@ -73,9 +68,8 @@ export type AppServerClientApprovalRequest =
     [Method in AppServerClientApprovalRequestMethod]: AppServerClientApprovalRequestOf<Method>;
   }[AppServerClientApprovalRequestMethod];
 
-export type AppServerClientApprovalRequestHandler = (
-  request: AppServerClientApprovalRequest
-) =>
-  | AppServerClientApprovalResponse
-  | void
-  | Promise<AppServerClientApprovalResponse | void>;
+export type AppServerClientApprovalHandlers = Partial<{
+  [Method in AppServerClientApprovalRequestMethod]: (
+    request: AppServerClientApprovalRequestOf<Method>
+  ) => AppServerClientApprovalResponseOf<Method> | Promise<AppServerClientApprovalResponseOf<Method>>;
+}>;

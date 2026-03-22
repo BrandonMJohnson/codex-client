@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
-  type AppServerClientApprovalRequest,
+  type AppServerClientApprovalRequestMethod,
   RpcResponseError,
   StdioTransport,
   type AppServerClientNotificationOf,
@@ -1002,14 +1002,14 @@ describe("codex app-server stdio integration", () => {
         | ((
             value: {
               requestId: string | number;
-              method: AppServerClientApprovalRequest["method"];
+              method: AppServerClientApprovalRequestMethod;
               params: Record<string, unknown>;
             }
           ) => void)
         | undefined;
       const approvalRequest = new Promise<{
         requestId: string | number;
-        method: AppServerClientApprovalRequest["method"];
+        method: AppServerClientApprovalRequestMethod;
         params: Record<string, unknown>;
       }>((resolve) => {
         settleApprovalRequest = resolve;
@@ -1045,30 +1045,62 @@ describe("codex app-server stdio integration", () => {
           resolvedNotifications.push(notification);
         });
 
-        const stopApprovalHandlers = client.handleApprovals(async (request) => {
-          settleApprovalRequest?.({
-            requestId: request.id,
-            method: request.method,
-            params: request.params as Record<string, unknown>
-          });
-          settleApprovalRequest = undefined;
-
-          switch (request.method) {
-            case "applyPatchApproval":
-            case "execCommandApproval":
-              return {
-                decision: "denied"
-              };
-            case "item/commandExecution/requestApproval":
-            case "item/fileChange/requestApproval":
-              return {
-                decision: "decline"
-              };
-            case "item/permissions/requestApproval":
-              return {
-                permissions: {},
-                scope: "turn"
-              };
+        const stopApprovalHandlers = client.handleApprovals({
+          applyPatchApproval: (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "denied"
+            };
+          },
+          execCommandApproval: (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "denied"
+            };
+          },
+          "item/commandExecution/requestApproval": (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "decline"
+            };
+          },
+          "item/fileChange/requestApproval": (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "decline"
+            };
+          },
+          "item/permissions/requestApproval": (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              permissions: {},
+              scope: "turn"
+            };
           }
         });
 

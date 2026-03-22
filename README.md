@@ -81,26 +81,18 @@ result so callers can recover the created thread id.
 ## Approval Helper
 
 `client.handleApprovals()` wires the approval-style server request methods into
-one callback.
+one typed handler object.
 
 ```ts
-const stopApprovals = client.handleApprovals(async (request) => {
-  if (request.method === "item/permissions/requestApproval") {
-    await request.respond({
-      permissions: {},
-      scope: "turn"
-    });
-    return;
-  }
-
-  switch (request.method) {
-    case "applyPatchApproval":
-    case "execCommandApproval":
-      return { decision: "denied" };
-    case "item/commandExecution/requestApproval":
-    case "item/fileChange/requestApproval":
-      return { decision: "decline" };
-  }
+const stopApprovals = client.handleApprovals({
+  applyPatchApproval: () => ({ decision: "denied" }),
+  execCommandApproval: () => ({ decision: "denied" }),
+  "item/commandExecution/requestApproval": () => ({ decision: "decline" }),
+  "item/fileChange/requestApproval": () => ({ decision: "decline" }),
+  "item/permissions/requestApproval": () => ({
+    permissions: {},
+    scope: "turn"
+  })
 });
 ```
 

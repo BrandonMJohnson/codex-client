@@ -20,10 +20,9 @@ import {
 } from "./threadRun.js";
 import {
   APPROVAL_REQUEST_METHODS,
-  type AppServerClientApprovalRequest,
-  type AppServerClientApprovalRequestHandler,
+  type AppServerClientApprovalHandlers,
   type AppServerClientApprovalRequestMethod,
-  type AppServerClientApprovalResponse,
+  type AppServerClientApprovalRequestOf,
   type AppServerClientApprovalResponseOf
 } from "./approvalHandling.js";
 import type {
@@ -809,18 +808,26 @@ export class AppServerClient {
   }
 
   /**
-   * Register one callback for the approval-style server request methods that
-   * app-server emits during risky operations.
+   * Register typed approval handlers for the approval-style server request
+   * methods that app-server emits during risky operations.
    *
-   * The handler can return the protocol response directly or call
-   * `request.respond(...)` manually if it needs to make the response decision
-   * later. This keeps the helper ergonomic while still preserving the lower-
-   * level request APIs for callers that need full control.
+   * Provide the method handlers you want to auto-handle. Each handler returns
+   * the exact protocol response for that method, while the lower-level
+   * `onServerRequest()` and `handleRequest()` APIs remain available for callers
+   * that need more control.
    */
   public handleApprovals(
-    handler: AppServerClientApprovalRequestHandler
+    handlers: AppServerClientApprovalHandlers
   ): () => void {
-    for (const method of APPROVAL_REQUEST_METHODS) {
+    const activeMethods = APPROVAL_REQUEST_METHODS.filter(
+      (method) => handlers[method] !== undefined
+    );
+
+    if (activeMethods.length === 0) {
+      return () => {};
+    }
+
+    for (const method of activeMethods) {
       if (this.#autoHandledRequestMethods.has(method)) {
         throw new RpcStateError(
           `Cannot register more than one auto-handler for server request "${method}".`
@@ -828,61 +835,104 @@ export class AppServerClient {
       }
     }
 
-    for (const method of APPROVAL_REQUEST_METHODS) {
+    for (const method of activeMethods) {
       this.#autoHandledRequestMethods.add(method);
     }
 
-    const unsubscribe = this.#session.onRequest((request) => {
-      if (!isApprovalRequestMethod(request.method)) {
-        return;
-      }
-
-      const wrapper = this.#createTypedRequestWrapper(request.method, request);
-      let resultPromise: Promise<AppServerClientApprovalResponse | void>;
+    const dispatchApprovalRequest = <
+      Method extends AppServerClientApprovalRequestMethod
+    >(
+      method: Method,
+      request: RpcInboundRequest,
+      handler: NonNullable<AppServerClientApprovalHandlers[Method]>
+    ): void => {
+      const approvalRequest = this.#createApprovalRequestWrapper(method, request);
+      let resultPromise: Promise<
+        AppServerClientApprovalResponseOf<Method> | undefined
+      >;
 
       try {
-        resultPromise = Promise.resolve(
-          handler(wrapper.request as AppServerClientApprovalRequest)
-        );
+        resultPromise = Promise.resolve(handler(approvalRequest));
       } catch (error) {
         resultPromise = Promise.reject(error);
       }
 
       void resultPromise
         .then(async (result) => {
-          if (wrapper.wasResponded()) {
-            return;
-          }
-
           if (result === undefined) {
-            await wrapper.request.respondError({
+            await request.respondError({
               code: INTERNAL_RPC_ERROR_CODE,
-              message:
-                "Approval handler must return a response or call request.respond()."
+              message: "Approval handler must return a response."
             });
             return;
           }
 
-          await wrapper.request.respond(
-            result as AppServerClientApprovalResponseOf<
-              typeof request.method
-            >
-          );
+          await request.respond(result as JsonValue);
         })
         .catch(async (error: unknown) => {
-          if (wrapper.wasResponded()) {
-            return;
-          }
-
-          await wrapper.request.respondError({
+          await request.respondError({
             code: INTERNAL_RPC_ERROR_CODE,
             message: asError(error).message
           });
         });
+    };
+
+    const unsubscribe = this.#session.onRequest((request) => {
+      if (!isApprovalRequestMethod(request.method)) {
+        return;
+      }
+
+      switch (request.method) {
+        case "applyPatchApproval":
+          if (handlers.applyPatchApproval) {
+            dispatchApprovalRequest(
+              "applyPatchApproval",
+              request,
+              handlers.applyPatchApproval
+            );
+          }
+          return;
+        case "execCommandApproval":
+          if (handlers.execCommandApproval) {
+            dispatchApprovalRequest(
+              "execCommandApproval",
+              request,
+              handlers.execCommandApproval
+            );
+          }
+          return;
+        case "item/commandExecution/requestApproval":
+          if (handlers["item/commandExecution/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/commandExecution/requestApproval",
+              request,
+              handlers["item/commandExecution/requestApproval"]
+            );
+          }
+          return;
+        case "item/fileChange/requestApproval":
+          if (handlers["item/fileChange/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/fileChange/requestApproval",
+              request,
+              handlers["item/fileChange/requestApproval"]
+            );
+          }
+          return;
+        case "item/permissions/requestApproval":
+          if (handlers["item/permissions/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/permissions/requestApproval",
+              request,
+              handlers["item/permissions/requestApproval"]
+            );
+          }
+          return;
+      }
     });
 
     return () => {
-      for (const method of APPROVAL_REQUEST_METHODS) {
+      for (const method of activeMethods) {
         this.#autoHandledRequestMethods.delete(method);
       }
 
@@ -1003,6 +1053,17 @@ export class AppServerClient {
         }
       },
       wasResponded: () => responded
+    };
+  }
+
+  #createApprovalRequestWrapper<Method extends AppServerClientApprovalRequestMethod>(
+    method: Method,
+    request: RpcInboundRequest
+  ): AppServerClientApprovalRequestOf<Method> {
+    return {
+      id: request.id,
+      method,
+      params: request.params as AppServerClientApprovalRequestOf<Method>["params"]
     };
   }
 }

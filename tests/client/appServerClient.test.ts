@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
-  type AppServerClientApprovalRequest,
-  type AppServerClientApprovalResponse,
+  type AppServerClientApprovalRequestMethod,
   AppServerClientThreadRunError,
   type AppServerClientInboundRequest,
   type AppServerClientNotificationOf,
@@ -666,44 +665,46 @@ describe("AppServerClient", () => {
   it("routes approval requests through one handler with exact protocol shapes", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
-    const approvalMethods: AppServerClientApprovalRequest["method"][] = [];
+    const approvalMethods: AppServerClientApprovalRequestMethod[] = [];
 
-    client.handleApprovals(
-      async (request): Promise<AppServerClientApprovalResponse | void> => {
+    client.handleApprovals({
+      applyPatchApproval: (request) => {
         approvalMethods.push(request.method);
-
-        if (request.method === "item/permissions/requestApproval") {
-          await request.respond({
-            permissions: {
-              network: {
-                enabled: true
-              }
-            },
-            scope: "turn"
-          });
-          return;
-        }
-
-        switch (request.method) {
-          case "applyPatchApproval":
-            return {
-              decision: "approved"
-            };
-          case "execCommandApproval":
-            return {
-              decision: "approved_for_session"
-            };
-          case "item/commandExecution/requestApproval":
-            return {
-              decision: "accept"
-            };
-          case "item/fileChange/requestApproval":
-            return {
-              decision: "decline"
-            };
-        }
+        return {
+          decision: "approved"
+        };
+      },
+      execCommandApproval: (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "approved_for_session"
+        };
+      },
+      "item/commandExecution/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "accept"
+        };
+      },
+      "item/fileChange/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "decline"
+        };
+      },
+      "item/permissions/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        expect(request.params.reason).toBe("Need network");
+        return {
+          permissions: {
+            network: {
+              enabled: true
+            }
+          },
+          scope: "turn"
+        };
       }
-    );
+    });
     client.handleRequest("item/tool/call", (): DynamicToolCallResponse => ({
       success: true,
       contentItems: []
@@ -947,8 +948,10 @@ describe("AppServerClient", () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
 
-    client.handleApprovals(() => {
-      throw new Error("approval handler exploded");
+    client.handleApprovals({
+      applyPatchApproval: () => {
+        throw new Error("approval handler exploded");
+      }
     });
 
     const initialize = client.initialize(createInitializeParams());
