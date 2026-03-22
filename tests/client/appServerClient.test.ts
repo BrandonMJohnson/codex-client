@@ -49,6 +49,10 @@ import {
   type TransportMessageListener,
   type TransportState
 } from "../../src/index.js";
+import {
+  collectAgentMessageDeltaText,
+  documentedTurnStreamingFixture
+} from "../fixtures/streamingNotificationFixtures.js";
 
 class FakeTransport implements Transport {
   readonly sentMessages: JsonValue[] = [];
@@ -472,6 +476,122 @@ describe("AppServerClient", () => {
 
     expect(turnStartedEvents).toEqual([firstTurnStartedEvent]);
     expect(tokenUsageEvents).toEqual([tokenUsageEvent]);
+  });
+
+  it("preserves raw and typed notification order for a documented streaming fixture", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const rawMethods: string[] = [];
+    const typedMethods: string[] = [];
+
+    client.onNotification((notification) => {
+      rawMethods.push(notification.method);
+    });
+    client.onEvent("turn/started", (notification) => {
+      typedMethods.push(notification.method);
+    });
+    client.onEvent("item/started", (notification) => {
+      typedMethods.push(notification.method);
+    });
+    client.onEvent("item/agentMessage/delta", (notification) => {
+      typedMethods.push(notification.method);
+    });
+    client.onEvent("item/completed", (notification) => {
+      typedMethods.push(notification.method);
+    });
+    client.onEvent("turn/completed", (notification) => {
+      typedMethods.push(notification.method);
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+
+    for (const notification of documentedTurnStreamingFixture.notifications) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    const expectedMethods = documentedTurnStreamingFixture.notifications.map(
+      (notification) => notification.method
+    );
+
+    expect(rawMethods).toEqual(expectedMethods);
+    expect(typedMethods).toEqual(expectedMethods);
+  });
+
+  it("supports turn consumers that apply item deltas in arrival order until turn completion", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const activeItemIds = new Set<string>();
+    const completedItemIds = new Set<string>();
+    let streamedAgentMessageText = "";
+    let completedAgentMessageText: string | null = null;
+    let completedTurnId: string | null = null;
+
+    client.onEvent("item/started", (notification) => {
+      expect(notification.params.threadId).toBe(
+        documentedTurnStreamingFixture.threadId
+      );
+      expect(notification.params.turnId).toBe(documentedTurnStreamingFixture.turnId);
+      expect(completedItemIds.has(notification.params.item.id)).toBe(false);
+      activeItemIds.add(notification.params.item.id);
+    });
+    client.onEvent("item/agentMessage/delta", (notification) => {
+      expect(activeItemIds.has(notification.params.itemId)).toBe(true);
+      expect(completedItemIds.has(notification.params.itemId)).toBe(false);
+      streamedAgentMessageText += notification.params.delta;
+    });
+    client.onEvent("item/completed", (notification) => {
+      expect(activeItemIds.has(notification.params.item.id)).toBe(true);
+      activeItemIds.delete(notification.params.item.id);
+      completedItemIds.add(notification.params.item.id);
+
+      if (notification.params.item.type === "agentMessage") {
+        completedAgentMessageText = notification.params.item.text;
+      }
+    });
+    client.onEvent("turn/completed", (notification) => {
+      expect(activeItemIds.size).toBe(0);
+      completedTurnId = notification.params.turn.id;
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+
+    for (const notification of documentedTurnStreamingFixture.notifications) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    expect(streamedAgentMessageText).toBe(
+      documentedTurnStreamingFixture.expectedAgentMessageText
+    );
+    expect(streamedAgentMessageText).toBe(
+      collectAgentMessageDeltaText(
+        documentedTurnStreamingFixture.notifications,
+        documentedTurnStreamingFixture.agentMessageItemId
+      )
+    );
+    expect(completedAgentMessageText).toBe(
+      documentedTurnStreamingFixture.expectedAgentMessageText
+    );
+    expect(completedTurnId).toBe(documentedTurnStreamingFixture.turnId);
   });
 
   it("filters typed server-request subscriptions by method and preserves typed responses", async () => {
