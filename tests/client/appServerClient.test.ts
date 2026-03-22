@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type CommandExecResizeResponse,
+  type CommandExecResponse,
+  type CommandExecTerminateResponse,
+  type CommandExecWriteResponse,
   RpcResponseError,
   RpcStateError,
   type InitializeParams,
@@ -542,6 +546,122 @@ describe("AppServerClient", () => {
     });
     await expect(turnInterrupt).resolves.toEqual(createTurnInterruptResponse());
   });
+
+  it("routes command namespace helpers to the stable command RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const commandExec = client.command.exec({
+      command: ["/bin/echo", "hello"],
+      cwd: "/workspace",
+      env: {
+        TEST_ENV: "1"
+      }
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "command/exec",
+      params: {
+        command: ["/bin/echo", "hello"],
+        cwd: "/workspace",
+        env: {
+          TEST_ENV: "1"
+        }
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createCommandExecResponse({
+        exitCode: 0,
+        stdout: "hello\n",
+        stderr: ""
+      }) as JsonValue
+    });
+    await expect(commandExec).resolves.toEqual(
+      createCommandExecResponse({
+        exitCode: 0,
+        stdout: "hello\n",
+        stderr: ""
+      })
+    );
+
+    const commandWrite = client.command.write({
+      processId: "proc-1",
+      deltaBase64: "aGVsbG8=",
+      closeStdin: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "command/exec/write",
+      params: {
+        processId: "proc-1",
+        deltaBase64: "aGVsbG8=",
+        closeStdin: true
+      }
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createEmptyCommandResponse() as JsonValue
+    });
+    await expect(commandWrite).resolves.toEqual(createEmptyCommandResponse());
+
+    const commandResize = client.command.resize({
+      processId: "proc-1",
+      size: {
+        cols: 120,
+        rows: 40
+      }
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "command/exec/resize",
+      params: {
+        processId: "proc-1",
+        size: {
+          cols: 120,
+          rows: 40
+        }
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createEmptyCommandResponse() as JsonValue
+    });
+    await expect(commandResize).resolves.toEqual(createEmptyCommandResponse());
+
+    const commandTerminate = client.command.terminate({
+      processId: "proc-1"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[3]).toEqual({
+      id: 5,
+      method: "command/exec/terminate",
+      params: {
+        processId: "proc-1"
+      }
+    });
+    transport.emitMessage({
+      id: 5,
+      result: createEmptyCommandResponse() as JsonValue
+    });
+    await expect(commandTerminate).resolves.toEqual(createEmptyCommandResponse());
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -593,6 +713,23 @@ function createTurnSteerResponse(turnId: string): TurnSteerResponse {
 }
 
 function createTurnInterruptResponse(): TurnInterruptResponse {
+  return {};
+}
+
+function createCommandExecResponse(
+  overrides: Partial<CommandExecResponse> = {}
+): CommandExecResponse {
+  return {
+    exitCode: overrides.exitCode ?? 0,
+    stdout: overrides.stdout ?? "",
+    stderr: overrides.stderr ?? ""
+  };
+}
+
+function createEmptyCommandResponse():
+  | CommandExecWriteResponse
+  | CommandExecResizeResponse
+  | CommandExecTerminateResponse {
   return {};
 }
 

@@ -48,6 +48,7 @@ The protocol details in this plan are derived from that README, including:
 - Expanded the stable `client.turn.*` namespace with `turn.steer()` and `turn.interrupt()` helpers, added focused unit coverage for RPC routing, and added a real stdio integration test that verifies `turn/interrupt` resolves and later emits a `turn/completed` notification with `status: "interrupted"`.
 - Published the repository to GitHub, added a baseline `CI` workflow for typecheck/build/test, enabled Dependabot for npm and GitHub Actions updates, and documented the protected-branch pull request workflow in repo guidance.
 - Tightened the repo workflow guidance so contributors always fast-forward local `main` before creating a new feature branch.
+- Added a first-pass `client.command.*` namespace covering `command/exec`, `command/exec/write`, `command/exec/resize`, and `command/exec/terminate`, with focused unit coverage plus a real stdio integration check for buffered standalone command execution.
 
 ## Architectural Direction
 
@@ -173,7 +174,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Implement `initialize()` and `initialized()`
 - [x] Implement thread APIs needed for normal usage
 - [x] Implement turn APIs needed for normal usage
-- [ ] Implement `command/exec*` APIs
+- [x] Implement `command/exec*` APIs
 - [ ] Implement `fs/*` APIs
 - [ ] Implement `account/*` APIs
 - [x] Implement `model/list`, `skills/list`, and `app/list`

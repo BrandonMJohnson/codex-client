@@ -326,6 +326,56 @@ describe("codex app-server stdio integration", () => {
     },
     30_000
   );
+
+  itIfCodex(
+    "executes a standalone command against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const commandResult = await client.command.exec({
+          command: ["/bin/echo", "command-client-api"],
+          cwd: process.cwd()
+        });
+
+        expect(commandResult).toEqual({
+          exitCode: 0,
+          stdout: "command-client-api\n",
+          stderr: ""
+        });
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
 });
 
 function getCodexVersion(): string | null {
