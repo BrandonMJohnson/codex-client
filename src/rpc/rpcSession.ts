@@ -46,8 +46,6 @@ type PendingRequest = {
   readonly dispose: () => void;
 };
 
-const LATE_RESPONSE_GRACE_PERIOD_MS = 5 * 60 * 1000;
-
 export interface RpcInboundRequest extends RpcRequestMessage {
   respond(result?: JsonValue): Promise<void>;
   respondError(error: RpcErrorObject): Promise<void>;
@@ -76,7 +74,6 @@ export class RpcSession {
   readonly #closeListeners = new ListenerSet<RpcSessionCloseListener>();
   readonly #errorListeners = new ListenerSet<RpcSessionErrorListener>();
   readonly #notificationListeners = new ListenerSet<RpcNotificationListener>();
-  readonly #ignoredResponseIds = new Map<RpcId, () => void>();
   readonly #pendingRequests = new Map<RpcId, PendingRequest>();
   readonly #requestListeners = new ListenerSet<RpcRequestListener>();
   readonly #transport: Transport;
@@ -344,13 +341,6 @@ export class RpcSession {
   }
 
   #handleResponse(message: RpcResponseMessage): void {
-    const ignoredResponseCleanup = this.#ignoredResponseIds.get(message.id);
-    if (ignoredResponseCleanup) {
-      this.#ignoredResponseIds.delete(message.id);
-      ignoredResponseCleanup();
-      return;
-    }
-
     const pendingRequest = this.#pendingRequests.get(message.id);
     if (!pendingRequest) {
       throw new RpcProtocolError(
@@ -413,7 +403,13 @@ export class RpcSession {
       return;
     }
 
-    this.#trackIgnoredResponseId(id);
+    // The protocol has no request-cancellation message. Once a request has been
+    // sent, abandoning it locally means a valid server response can still show
+    // up later. Closing the session is the only protocol-safe way to avoid
+    // misclassifying that late response or drifting out of sync with the
+    // server's view of outstanding request ids.
+    this.#finalizeClose(error);
+    void this.#transport.close();
   }
 
   #failPendingRequest(id: RpcId, error: Error): void {
@@ -438,11 +434,6 @@ export class RpcSession {
     this.#initializationState = "closed";
 
     const closeError = error ?? new RpcError("RPC session closed.");
-    for (const disposeIgnoredResponse of this.#ignoredResponseIds.values()) {
-      disposeIgnoredResponse();
-    }
-
-    this.#ignoredResponseIds.clear();
     for (const pendingRequest of this.#pendingRequests.values()) {
       pendingRequest.dispose();
       pendingRequest.reject(closeError);
@@ -459,23 +450,6 @@ export class RpcSession {
     this.#unsubscribeError = undefined;
     this.#unsubscribeClose?.();
     this.#unsubscribeClose = undefined;
-  }
-
-  #trackIgnoredResponseId(id: RpcId): void {
-    const existingCleanup = this.#ignoredResponseIds.get(id);
-    existingCleanup?.();
-
-    // Late responses are normal after a local timeout/abort, but we only keep
-    // a bounded grace window so a server that never replies cannot leak memory
-    // in long-lived client sessions.
-    const cleanupTimer = setTimeout(() => {
-      this.#ignoredResponseIds.delete(id);
-    }, LATE_RESPONSE_GRACE_PERIOD_MS);
-    cleanupTimer.unref?.();
-
-    this.#ignoredResponseIds.set(id, () => {
-      clearTimeout(cleanupTimer);
-    });
   }
 }
 

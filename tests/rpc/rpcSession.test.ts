@@ -293,13 +293,13 @@ describe("RpcSession", () => {
     }
   });
 
-  it("rejects aborted requests and does not treat their late responses as protocol errors", async () => {
+  it("rejects aborted requests and closes the session because late replies remain possible", async () => {
     const transport = new FakeTransport();
     const session = new RpcSession({ transport });
-    const errors: Error[] = [];
+    const closeEvents: Array<Error | undefined> = [];
 
-    session.onError((error) => {
-      errors.push(error);
+    session.onClose((error) => {
+      closeEvents.push(error);
     });
 
     await session.start();
@@ -318,23 +318,20 @@ describe("RpcSession", () => {
     controller.abort(new Error("caller cancelled"));
 
     await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
-
-    transport.emitMessage({ id: 2, result: ["gpt-5.4"] });
-
-    expect(errors).toEqual([]);
-    expect(session.initializationState).toBe("initialized");
+    expect(session.initializationState).toBe("closed");
+    expect(closeEvents).toHaveLength(1);
   });
 
-  it("expires ignored late-response ids so abandoned requests do not accumulate forever", async () => {
+  it("times out post-initialize requests and closes the session for the same reason", async () => {
     vi.useFakeTimers();
 
     try {
       const transport = new FakeTransport();
       const session = new RpcSession({ transport });
-      const errors: Error[] = [];
+      const closeEvents: Array<Error | undefined> = [];
 
-      session.onError((error) => {
-        errors.push(error);
+      session.onClose((error) => {
+        closeEvents.push(error);
       });
 
       await session.start();
@@ -344,20 +341,16 @@ describe("RpcSession", () => {
       await initialize;
       await session.initialized();
 
-      const controller = new AbortController();
       const modelList = session.request("model/list", undefined, {
-        signal: controller.signal
+        timeoutMs: 25
       });
       void modelList.catch(() => {});
-      controller.abort();
-      await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
 
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
-      transport.emitMessage({ id: 2, result: ["gpt-5.4"] });
+      await vi.advanceTimersByTimeAsync(25);
 
-      expect(errors).toHaveLength(1);
-      expect(errors[0]).toBeInstanceOf(RpcProtocolError);
+      await expect(modelList).rejects.toBeInstanceOf(RpcRequestTimeoutError);
       expect(session.initializationState).toBe("closed");
+      expect(closeEvents).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

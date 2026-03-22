@@ -344,15 +344,9 @@ describe("AppServerClient", () => {
       controller.abort();
 
       await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
-      transport.emitMessage({
-        id: 2,
-        result: {
-          data: [],
-          nextCursor: null
-        }
-      });
+      expect(client.initializationState).toBe("closed");
 
-      expect(client.initializationState).toBe("initialized");
+      await expect(client.modelList()).rejects.toBeInstanceOf(RpcStateError);
     } finally {
       vi.useRealTimers();
     }
