@@ -7,6 +7,10 @@ import {
   type InitializeParams,
   type JsonValue,
   type RpcNotificationMessage,
+  type Thread,
+  type ThreadReadResponse,
+  type ThreadResumeResponse,
+  type ThreadStartResponse,
   type Transport,
   type TransportCloseListener,
   type TransportErrorListener,
@@ -331,9 +335,11 @@ describe("AppServerClient", () => {
     });
     transport.emitMessage({
       id: 2,
-      result: createThreadEnvelope("thread-1")
+      result: createThreadStartResponse(createThread("thread-1")) as JsonValue
     });
-    await expect(threadStart).resolves.toEqual(createThreadEnvelope("thread-1"));
+    await expect(threadStart).resolves.toEqual(
+      createThreadStartResponse(createThread("thread-1"))
+    );
 
     const threadResume = client.thread.resume({
       threadId: "thread-1",
@@ -348,36 +354,22 @@ describe("AppServerClient", () => {
         persistExtendedHistory: true
       }
     });
+    const resumedThread = createThread("thread-1", {
+      turns: [
+        {
+          id: "turn-1",
+          items: [],
+          status: "completed",
+          error: null
+        }
+      ]
+    });
     transport.emitMessage({
       id: 3,
-      result: createThreadEnvelope("thread-1", {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            createdAt: 1,
-            updatedAt: 2,
-            lastItemId: null,
-            input: [],
-            items: []
-          }
-        ]
-      })
+      result: createThreadResumeResponse(resumedThread) as JsonValue
     });
     await expect(threadResume).resolves.toEqual(
-      createThreadEnvelope("thread-1", {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            createdAt: 1,
-            updatedAt: 2,
-            lastItemId: null,
-            input: [],
-            items: []
-          }
-        ]
-      })
+      createThreadResumeResponse(resumedThread)
     );
 
     const threadRead = client.thread.read({
@@ -395,9 +387,9 @@ describe("AppServerClient", () => {
     });
     transport.emitMessage({
       id: 4,
-      result: createThreadReadResponse("thread-1")
+      result: createThreadReadResponse(resumedThread) as JsonValue
     });
-    await expect(threadRead).resolves.toEqual(createThreadReadResponse("thread-1"));
+    await expect(threadRead).resolves.toEqual(createThreadReadResponse(resumedThread));
 
     const threadList = client.thread.list({
       limit: 10,
@@ -417,7 +409,7 @@ describe("AppServerClient", () => {
       result: {
         data: [createThread("thread-1")],
         nextCursor: "cursor-2"
-      }
+      } as JsonValue
     });
     await expect(threadList).resolves.toEqual({
       data: [createThread("thread-1")],
@@ -461,12 +453,9 @@ async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
 }
 
-function createThreadEnvelope(
-  threadId: string,
-  overrides: Record<string, JsonValue> = {}
-): JsonValue {
+function createThreadStartResponse(thread: Thread): ThreadStartResponse {
   return {
-    thread: createThread(threadId, overrides),
+    thread,
     model: "gpt-5",
     modelProvider: "openai",
     serviceTier: null,
@@ -474,37 +463,26 @@ function createThreadEnvelope(
     approvalPolicy: "never",
     approvalsReviewer: "user",
     sandbox: {
-      mode: "workspace-write",
-      networkAccess: false,
-      excludeTmpdirEnvVar: false,
-      excludeSlashesTmp: false
+      type: "dangerFullAccess"
     },
     reasoningEffort: null
-  } satisfies JsonValue;
+  };
 }
 
-function createThreadReadResponse(threadId: string): JsonValue {
+function createThreadResumeResponse(thread: Thread): ThreadResumeResponse {
+  return createThreadStartResponse(thread);
+}
+
+function createThreadReadResponse(thread: Thread): ThreadReadResponse {
   return {
-    thread: createThread(threadId, {
-      turns: [
-        {
-          id: "turn-1",
-          status: "completed",
-          createdAt: 1,
-          updatedAt: 2,
-          lastItemId: null,
-          input: [],
-          items: []
-        }
-      ]
-    })
-  } satisfies JsonValue;
+    thread
+  };
 }
 
 function createThread(
   threadId: string,
-  overrides: Record<string, JsonValue> = {}
-): JsonValue {
+  overrides: Partial<Thread> = {}
+): Thread {
   return {
     id: threadId,
     preview: "Demo thread",
@@ -512,7 +490,7 @@ function createThread(
     modelProvider: "openai",
     createdAt: 1,
     updatedAt: 2,
-    status: "idle",
+    status: { type: "idle" },
     path: "/tmp/thread-1.jsonl",
     cwd: "/workspace",
     cliVersion: "1.0.0",
@@ -523,5 +501,5 @@ function createThread(
     name: "Demo thread",
     turns: [],
     ...overrides
-  } satisfies JsonValue;
+  };
 }
