@@ -677,6 +677,100 @@ describe("codex app-server stdio integration", () => {
   );
 
   itIfCodex(
+    "runs a turn helper that collects streamed events against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const streamedMethods: string[] = [];
+        const run = await client.turn.run(
+          {
+            threadId: threadStart.thread.id,
+            ...(preferredModel ? { model: preferredModel } : {}),
+            effort: "low",
+            input: [
+              {
+                type: "text",
+                text: "Reply with the exact text helper-stream-check.",
+                text_elements: []
+              }
+            ]
+          },
+          {
+            completionTimeoutMs: 45_000,
+            onEvent: (event) => {
+              streamedMethods.push(event.method);
+            }
+          }
+        );
+
+        const completedAgentMessage = run.completedItems.find(
+          (item) => item.type === "agentMessage"
+        );
+
+        expect(run.start.turn.id).toBe(run.completed.params.turn.id);
+        expect(run.completed.params.turn.status).toBe("completed");
+        expect(run.events[run.events.length - 1]?.method).toBe("turn/completed");
+        expect(streamedMethods).toEqual(run.events.map((event) => event.method));
+        expect(run.started?.params.turn.id ?? run.start.turn.id).toBe(run.start.turn.id);
+        expect(completedAgentMessage?.type).toBe("agentMessage");
+
+        if (completedAgentMessage?.type !== "agentMessage") {
+          throw new Error("Expected the helper run to complete an agentMessage item.");
+        }
+
+        const streamedText = normalizeNotificationText(
+          run.agentMessageDeltas[completedAgentMessage.id] ?? ""
+        );
+        const completedText = normalizeNotificationText(completedAgentMessage.text);
+
+        expect(completedText).toContain("helper-stream-check");
+        expect(streamedText.length).toBeGreaterThan(0);
+        expect(completedText).toContain(streamedText);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
     "suppresses opted-out turn and delta notifications against a real app-server",
     async () => {
       const child = spawn("codex", ["app-server", "--listen", "stdio://"], {

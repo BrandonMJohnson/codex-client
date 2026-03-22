@@ -7,6 +7,11 @@ import {
   type RpcInboundRequest,
   type RpcNotificationMessage
 } from "../rpc/index.js";
+import {
+  runTurnWithStream,
+  type AppServerClientTurnRunOptions,
+  type AppServerClientTurnRunResult
+} from "./turnRun.js";
 import type {
   Account,
   AppInfo,
@@ -373,6 +378,18 @@ export interface AppServerClientTurnApi {
     params: TurnInterruptParams,
     options?: AppServerClientRequestOptions
   ): Promise<TurnInterruptResponse>;
+  /**
+   * Start a turn and collect its lifecycle notifications until the matching
+   * `turn/completed` event arrives.
+   *
+   * The helper tolerates callers opting out of intermediate event classes such
+   * as `turn/started` or `item/agentMessage/delta`, but it still depends on
+   * `turn/completed` to know when the turn has finished.
+   */
+  run(
+    params: TurnStartParams,
+    options?: AppServerClientTurnRunOptions
+  ): Promise<AppServerClientTurnRunResult>;
 }
 
 export interface AppServerClientCommandApi {
@@ -526,7 +543,8 @@ export class AppServerClient {
       steer: async (params, options) =>
         await this.#request("turn/steer", params, options),
       interrupt: async (params, options) =>
-        await this.#request("turn/interrupt", params, options)
+        await this.#request("turn/interrupt", params, options),
+      run: async (params, options) => await runTurnWithStream(this, params, options)
     };
     this.command = {
       exec: async (params, options) =>

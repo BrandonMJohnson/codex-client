@@ -60,6 +60,8 @@ The protocol details in this plan are derived from that README, including:
 - Added deterministic fixture coverage for the documented `turn/started` -> `item/started` -> delta/progress -> `item/completed` -> `turn/completed` streaming lifecycle, including ordered agent-message delta reconstruction and review-mode boundary items.
 - Documented the upstream README event-ordering assumptions in the client API comments and README so higher-level helpers can rely on the same lifecycle contract the fixture tests assert.
 - Added targeted real stdio integration coverage for live item-stream ordering and `optOutNotificationMethods` suppression so upstream notification drift is caught beyond the deterministic fixture tests.
+- Added a first-pass `client.turn.run()` ergonomic helper that starts a turn, collects its matching lifecycle notifications through `turn/completed`, reconstructs streamed agent-message deltas by item id, and returns the ordered event log plus completed items.
+- Added focused unit coverage for pre-response event buffering and notification-opt-out tolerance in the helper, plus a real stdio integration check that validates the helper against a live `codex app-server`.
 
 ## Architectural Direction
 
@@ -221,7 +223,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 ### 8. Ergonomic Helpers
 
 - [ ] Add high-level helpers for common thread + turn flows
-- [ ] Add helper APIs for streamed turn consumption
+- [x] Add helper APIs for streamed turn consumption
 - [ ] Add helper APIs for approval handling
 - [ ] Keep helpers optional so low-level protocol access stays available
 

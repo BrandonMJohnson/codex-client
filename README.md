@@ -16,6 +16,34 @@ The app-server protocol is notification-driven once a turn starts.
 - Treat `turn/completed` as the terminal notification for a turn's final status; token accounting may continue to arrive on `thread/tokenUsage/updated`.
 - Per-connection opt-outs via `initialize.capabilities.optOutNotificationMethods` can suppress specific methods, so higher-level helpers should tolerate missing event classes when callers opt out.
 
+## Turn Helper
+
+`client.turn.run()` starts a turn, collects the matching lifecycle notifications
+for that turn id, and resolves once `turn/completed` arrives.
+
+```ts
+const run = await client.turn.run({
+  threadId,
+  input: [
+    {
+      type: "text",
+      text: "Reply with exactly helper-check.",
+      text_elements: []
+    }
+  ]
+});
+
+const agentMessage = run.completedItems.find(
+  (item) => item.type === "agentMessage"
+);
+```
+
+The helper returns the immediate `turn/start` response, the ordered event log,
+completed items, and reconstructed `item/agentMessage/delta` text keyed by item
+id. It tolerates missing intermediate notifications such as `turn/started` when
+the connection has opted out of those methods, but it still depends on
+`turn/completed` to know when the run is finished.
+
 ## Local Development
 
 Install dependencies:

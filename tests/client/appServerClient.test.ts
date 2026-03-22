@@ -1298,6 +1298,191 @@ describe("AppServerClient", () => {
     await expect(turnInterrupt).resolves.toEqual(createTurnInterruptResponse());
   });
 
+  it("runs a turn and collects streamed lifecycle events for the matching turn id", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const seenMethods: string[] = [];
+    const fixtureStarted = documentedTurnStreamingFixture.notifications[0];
+    const fixtureCompleted = documentedTurnStreamingFixture.notifications.at(-1);
+    const completedReviewItem = documentedTurnStreamingFixture.notifications[2];
+    const completedAgentItem = documentedTurnStreamingFixture.notifications[6];
+    const completedReviewExitItem = documentedTurnStreamingFixture.notifications[8];
+
+    if (fixtureStarted?.method !== "turn/started") {
+      throw new Error("Expected the streaming fixture to start with turn/started.");
+    }
+
+    if (fixtureCompleted?.method !== "turn/completed") {
+      throw new Error("Expected the streaming fixture to end with turn/completed.");
+    }
+
+    if (
+      completedReviewItem?.method !== "item/completed" ||
+      completedAgentItem?.method !== "item/completed" ||
+      completedReviewExitItem?.method !== "item/completed"
+    ) {
+      throw new Error("Expected fixture item completions at the documented indexes.");
+    }
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.turn.run(
+      {
+        threadId: documentedTurnStreamingFixture.threadId,
+        input: [
+          {
+            type: "text",
+            text: "Run the fixture turn.",
+            text_elements: []
+          }
+        ]
+      },
+      {
+        onEvent: (event) => {
+          seenMethods.push(event.method);
+        }
+      }
+    );
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "turn/start",
+      params: {
+        threadId: documentedTurnStreamingFixture.threadId,
+        input: [
+          {
+            type: "text",
+            text: "Run the fixture turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+
+    for (const notification of documentedTurnStreamingFixture.notifications.slice(0, 4)) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ) as JsonValue
+    });
+
+    for (const notification of documentedTurnStreamingFixture.notifications.slice(4)) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    await expect(run).resolves.toEqual({
+      start: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ),
+      started: fixtureStarted,
+      completed: fixtureCompleted,
+      events: documentedTurnStreamingFixture.notifications,
+      completedItems: [
+        completedReviewItem.params.item,
+        completedAgentItem.params.item,
+        completedReviewExitItem.params.item
+      ],
+      agentMessageDeltas: {
+        [documentedTurnStreamingFixture.agentMessageItemId]:
+          documentedTurnStreamingFixture.expectedAgentMessageText
+      }
+    });
+    expect(seenMethods).toEqual(
+      documentedTurnStreamingFixture.notifications.map(
+        (notification) => notification.method
+      )
+    );
+  });
+
+  it("runs a turn when callers opt out of turn-started and delta notifications", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const completedReviewItem = documentedTurnStreamingFixture.notifications[2];
+    const completedAgentItem = documentedTurnStreamingFixture.notifications[6];
+
+    if (
+      completedReviewItem?.method !== "item/completed" ||
+      completedAgentItem?.method !== "item/completed"
+    ) {
+      throw new Error("Expected fixture item completions at the documented indexes.");
+    }
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.turn.run({
+      threadId: documentedTurnStreamingFixture.threadId,
+      input: [
+        {
+          type: "text",
+          text: "Run the opt-out fixture turn.",
+          text_elements: []
+        }
+      ]
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ) as JsonValue
+    });
+
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[1] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[2] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[3] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[6] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[
+        documentedTurnStreamingFixture.notifications.length - 1
+      ] as unknown as JsonValue
+    );
+
+    await expect(run).resolves.toMatchObject({
+      started: null,
+      completedItems: [
+        completedReviewItem.params.item,
+        completedAgentItem.params.item
+      ],
+      agentMessageDeltas: {}
+    });
+  });
+
   it("routes command namespace helpers to the stable command RPC methods", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
