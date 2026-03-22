@@ -16,14 +16,6 @@ The package provides a typed, layered client surface:
 - API overview: [API Surface](https://brandonmjohnson.github.io/codex-client/reference/)
 - Client reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
 
-Docs commands:
-
-```bash
-npm run docs:dev
-npm run docs:build
-npm run docs:preview
-```
-
 ## Status
 
 The project is under active development. The stable `stdio` client surface is implemented and covered by unit and live integration tests.
