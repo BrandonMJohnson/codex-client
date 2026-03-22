@@ -59,6 +59,7 @@ The protocol details in this plan are derived from that README, including:
 - Threaded the same request options through the ergonomic client helpers and added focused unit coverage for initialize timeout handling, post-initialize abort/timeout session closure, and option forwarding.
 - Added deterministic fixture coverage for the documented `turn/started` -> `item/started` -> delta/progress -> `item/completed` -> `turn/completed` streaming lifecycle, including ordered agent-message delta reconstruction and review-mode boundary items.
 - Documented the upstream README event-ordering assumptions in the client API comments and README so higher-level helpers can rely on the same lifecycle contract the fixture tests assert.
+- Added targeted real stdio integration coverage for live item-stream ordering and `optOutNotificationMethods` suppression so upstream notification drift is caught beyond the deterministic fixture tests.
 
 ## Architectural Direction
 
