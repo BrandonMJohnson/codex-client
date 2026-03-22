@@ -4,10 +4,12 @@ This document defines how QA should be performed for this repository.
 
 QA reviewers should also read:
 
-- [AGENTS.md](./AGENTS.md)
-- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
+- the scoped diff they are validating
+- the affected files for the change under test
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) only when roadmap context is needed for the scoped change
+- [AGENTS.md](./AGENTS.md) only when the implementing agent explicitly indicates that broader repository workflow context is required for the specific QA pass
 
-`AGENTS.md` defines the overall workflow and quality bar. This document defines the specific expectations for the QA pass.
+This document defines the specific expectations for the QA pass. QA sub-agents should usually stay narrowly scoped so they remain a terminal read-only validation pass for the current change instead of recursively re-running broader repository workflow.
 
 ## QA Role
 

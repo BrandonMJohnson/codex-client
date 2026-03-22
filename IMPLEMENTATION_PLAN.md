@@ -51,6 +51,7 @@ The protocol details in this plan are derived from that README, including:
 - Added a first-pass `client.command.*` namespace covering `command/exec`, `command/exec/write`, `command/exec/resize`, and `command/exec/terminate`, with focused unit coverage plus a real stdio integration check for buffered standalone command execution.
 - Added a first-pass `client.fs.*` namespace covering `fs/readFile`, `fs/writeFile`, `fs/createDirectory`, `fs/getMetadata`, `fs/readDirectory`, `fs/remove`, and `fs/copy`, with focused unit coverage plus a real stdio integration flow against `codex app-server`.
 - Added a first-pass `client.account.*` namespace covering `account/read`, `account/login/start`, `account/login/cancel`, `account/logout`, and `account/rateLimits/read`, with focused unit coverage plus real stdio integration checks for account reads, rate-limit snapshots, live login-start/cancel flows, and an opt-in logout flow.
+- Kept raw notification passthrough available on the client surface and added typed `client.onEvent(method, listener)` subscriptions for generated server notification methods, with focused unit coverage plus real stdio integration coverage using typed turn lifecycle events.
 
 ## Architectural Direction
 
@@ -183,12 +184,12 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ### 5. Event Streaming
 
-- [ ] Expose raw notification access
-- [ ] Expose typed event subscriptions
-- [ ] Support turn lifecycle events
-- [ ] Support item lifecycle events
-- [ ] Support delta events like `item/agentMessage/delta`
-- [ ] Support token usage and error events
+- [x] Expose raw notification access
+- [x] Expose typed event subscriptions
+- [x] Support turn lifecycle events
+- [x] Support item lifecycle events
+- [x] Support delta events like `item/agentMessage/delta`
+- [x] Support token usage and error events
 - [ ] Document event ordering assumptions from the upstream README
 
 ### 6. Incoming Requests And Approvals
@@ -244,7 +245,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Add stable bindings and regeneration scripts
 - [x] Implement initialize flow
 - [x] Implement stable methods for command and fs APIs
-- [ ] Implement event streaming
+- [x] Implement event streaming
 - [ ] Implement approval handling
 - [ ] Add unit tests and basic integration tests
 

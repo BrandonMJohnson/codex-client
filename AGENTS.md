@@ -103,6 +103,11 @@ Only after review and QA have both completed is the task considered done.
 Every meaningful code change must go through sub-agent code review.
 
 - The code review sub-agent should read [CODE_REVIEW_GUIDANCE.md](./CODE_REVIEW_GUIDANCE.md) before reviewing.
+- The code review sub-agent should usually be scoped only to [CODE_REVIEW_GUIDANCE.md](./CODE_REVIEW_GUIDANCE.md), the relevant diff, and the specific files under review.
+- Do not give the code review sub-agent broader repository workflow instructions than it needs for the review task.
+- In particular, do not require the code review sub-agent to read this file unless that context is genuinely necessary for the specific review.
+- The code review sub-agent should be explicitly told not to spawn additional sub-agents.
+- The code review sub-agent is a terminal read-only pass for the scoped change, not a coordinator for another review or QA workflow.
 - The task is not complete until a sub-agent has reviewed the change.
 - The agent should automatically run this review step as part of the normal workflow.
 - Do not ask the user whether code review should be run.
@@ -120,6 +125,11 @@ Every meaningful code change must go through sub-agent code review.
 After code review is complete, every meaningful code change must go through sub-agent QA.
 
 - The QA sub-agent should read [QA_GUIDANCE.md](./QA_GUIDANCE.md) before validating.
+- The QA sub-agent should usually be scoped only to [QA_GUIDANCE.md](./QA_GUIDANCE.md), the relevant diff, the affected files, and the validation commands or results needed for QA.
+- Do not give the QA sub-agent broader repository workflow instructions than it needs for the QA task.
+- In particular, do not require the QA sub-agent to read this file unless that context is genuinely necessary for the specific QA pass.
+- The QA sub-agent should be explicitly told not to spawn additional sub-agents.
+- The QA sub-agent is a terminal read-only validation pass for the scoped change, not a coordinator for another review or QA workflow.
 - QA must be performed by a sub-agent after code review has finished.
 - The agent should automatically run this QA step after code review.
 - Do not ask the user whether QA should be run.
@@ -173,6 +183,7 @@ A task is done only when all of the following are true:
 - The default workflow is implementation -> validation -> commit -> sub-agent review -> fixes -> sub-agent QA -> fixes -> completion.
 - The agent should not treat review and QA as optional steps.
 - The agent should not ask the user for permission to perform required review or QA passes.
+- When spawning review or QA sub-agents, the agent should keep their context narrow and task-specific so they act as read-only reviewers or validators rather than recursively re-running the full repository workflow.
 - The agent should only stop short of these steps if technically blocked, and in that case it should explain the blocker clearly.
 
 ## Working Style

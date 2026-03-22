@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientNotificationOf,
   type CancelLoginAccountResponse,
   type CommandExecResizeResponse,
   type CommandExecResponse,
@@ -318,6 +319,81 @@ describe("AppServerClient", () => {
     ]);
     expect(requests).toEqual(["item/tool/call"]);
     expect(transport.sentMessages).toEqual([{ id: "req-1", result: null }]);
+  });
+
+  it("filters typed event subscriptions by method and supports unsubscribe", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const turnStartedEvents: AppServerClientNotificationOf<"turn/started">[] =
+      [];
+    const tokenUsageEvents: AppServerClientNotificationOf<"thread/tokenUsage/updated">[] =
+      [];
+    const firstTurnStartedEvent: AppServerClientNotificationOf<"turn/started"> = {
+      method: "turn/started",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-1", "inProgress")
+      }
+    };
+    const tokenUsageEvent: AppServerClientNotificationOf<"thread/tokenUsage/updated"> =
+      {
+        method: "thread/tokenUsage/updated",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: {
+              totalTokens: 30,
+              inputTokens: 10,
+              cachedInputTokens: 5,
+              outputTokens: 12,
+              reasoningOutputTokens: 3
+            },
+            last: {
+              totalTokens: 12,
+              inputTokens: 4,
+              cachedInputTokens: 2,
+              outputTokens: 5,
+              reasoningOutputTokens: 1
+            },
+            modelContextWindow: 200_000
+          }
+        }
+      };
+    const secondTurnStartedEvent: AppServerClientNotificationOf<"turn/started"> = {
+      method: "turn/started",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-2", "inProgress")
+      }
+    };
+
+    const stopTurnStartedEvents = client.onEvent("turn/started", (event) => {
+      turnStartedEvents.push(event);
+    });
+    client.onEvent("thread/tokenUsage/updated", (event) => {
+      tokenUsageEvents.push(event);
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+
+    transport.emitMessage(firstTurnStartedEvent as unknown as JsonValue);
+    transport.emitMessage(tokenUsageEvent as unknown as JsonValue);
+    stopTurnStartedEvents();
+    transport.emitMessage(secondTurnStartedEvent as unknown as JsonValue);
+
+    expect(turnStartedEvents).toEqual([firstTurnStartedEvent]);
+    expect(tokenUsageEvents).toEqual([tokenUsageEvent]);
   });
 
   it("routes thread namespace helpers to the stable thread RPC methods", async () => {

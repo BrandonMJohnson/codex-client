@@ -48,6 +48,7 @@ import type {
   SkillsListEntry,
   SkillsListParams,
   SkillsListResponse,
+  ServerNotification,
   Thread,
   ThreadListParams,
   ThreadListResponse,
@@ -186,6 +187,11 @@ export type AppServerClientApp = AppInfo;
 export type AppServerClientAccount = Account;
 export type AppServerClientThread = Thread;
 export type AppServerClientTurn = Turn;
+export type AppServerClientNotification = ServerNotification;
+export type AppServerClientEventMethod = AppServerClientNotification["method"];
+export type AppServerClientNotificationOf<
+  Method extends AppServerClientEventMethod
+> = Extract<AppServerClientNotification, { method: Method }>;
 
 export interface AppServerClientAccountApi {
   /**
@@ -465,9 +471,26 @@ export class AppServerClient {
   public onNotification(
     listener: (notification: RpcNotificationMessage) => void
   ): () => void {
-    // Keep this surface at raw RPC fidelity until the client grows the
-    // method-specific validation needed for a sound typed event API.
+    // Keep the raw RPC surface available for callers that need full protocol
+    // fidelity, including notification methods the ergonomic client has not
+    // wrapped further yet.
     return this.#session.onNotification(listener);
+  }
+
+  public onEvent<Method extends AppServerClientEventMethod>(
+    method: Method,
+    listener: (notification: AppServerClientNotificationOf<Method>) => void
+  ): () => void {
+    return this.#session.onNotification((notification) => {
+      if (notification.method !== method) {
+        return;
+      }
+
+      // Method names come from the generated protocol union. We currently trust
+      // app-server to pair each known method with the documented payload shape,
+      // so this narrows by method without re-validating the full params object.
+      listener(notification as AppServerClientNotificationOf<Method>);
+    });
   }
 
   public onRequest(

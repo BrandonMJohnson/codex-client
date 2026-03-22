@@ -4,10 +4,12 @@ This document defines how code review should be performed for this repository.
 
 Reviewers should also read:
 
-- [AGENTS.md](./AGENTS.md)
-- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
+- the scoped diff they are reviewing
+- the specific files under review
+- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) only when roadmap context is needed for the scoped change
+- [AGENTS.md](./AGENTS.md) only when the implementing agent explicitly indicates that broader repository workflow context is required for the specific review
 
-`AGENTS.md` defines the overall workflow and quality bar. This document defines the specific expectations for the code review pass.
+This document defines the specific expectations for the code review pass. Review sub-agents should usually stay narrowly scoped so they remain a terminal read-only review for the current change instead of recursively re-running broader repository workflow.
 
 ## Reviewer Role
 
