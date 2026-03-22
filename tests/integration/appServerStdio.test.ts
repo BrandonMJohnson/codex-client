@@ -10,6 +10,7 @@ import {
   AppServerClient,
   RpcResponseError,
   StdioTransport,
+  type AppServerClientNotificationOf,
   type RpcNotificationMessage,
   type ThreadResumeResponse
 } from "../../src/index.js";
@@ -433,10 +434,10 @@ describe("codex app-server stdio integration", () => {
         output: child.stdin
       });
       const client = new AppServerClient({ transport });
-      const turnNotifications: Array<{
-        method: "turn/started" | "turn/completed";
-        params: { threadId: string; turn: { id: string; status: string } };
-      }> = [];
+      const turnNotifications: Array<
+        | AppServerClientNotificationOf<"turn/started">
+        | AppServerClientNotificationOf<"turn/completed">
+      > = [];
 
       try {
         await client.initialize({
@@ -447,15 +448,11 @@ describe("codex app-server stdio integration", () => {
           },
           capabilities: null
         });
-        client.onNotification((notification) => {
-          if (
-            notification.method === "turn/started" ||
-            notification.method === "turn/completed"
-          ) {
-            turnNotifications.push(
-              notification as (typeof turnNotifications)[number]
-            );
-          }
+        client.onEvent("turn/started", (notification) => {
+          turnNotifications.push(notification);
+        });
+        client.onEvent("turn/completed", (notification) => {
+          turnNotifications.push(notification);
         });
 
         const modelList = await client.modelList({ includeHidden: true });
