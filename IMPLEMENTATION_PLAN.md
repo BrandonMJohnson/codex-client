@@ -55,6 +55,8 @@ The protocol details in this plan are derived from that README, including:
 - Added typed `client.onServerRequest(method, listener)` and `client.handleRequest(method, handler)` helpers for stable server-initiated approval and request flows, covering command execution approvals, file change approvals, permission grants, dynamic tool calls, MCP elicitations, tool user-input requests, and ChatGPT token refresh requests with generated response typing.
 - Added focused unit coverage proving typed inbound request filtering, automatic protocol-shaped responses, and JSON-RPC internal-error fallbacks for failing request handlers, then re-ran the full `typecheck`, `build`, and `test` validation suite.
 - Added a targeted real stdio integration test that prompts the live server with `Try to do something that will require my approval.`, captures the resulting approval callback, responds through the client API, and asserts the matching `serverRequest/resolved` notification arrives.
+- Added client-configurable RPC request timeouts and `AbortSignal` cancellation support; once a request has gone on the wire, timing out or aborting it now closes the session so the client does not drift from the server on outstanding request ids.
+- Threaded the same request options through the ergonomic client helpers and added focused unit coverage for initialize timeout handling, post-initialize abort/timeout session closure, and option forwarding.
 
 ## Architectural Direction
 
@@ -165,7 +167,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Route incoming server-initiated requests
 - [x] Enforce `initialize` before any other client call
 - [x] Prevent repeated `initialize` on the same connection
-- [ ] Add timeout and cancellation support where appropriate
+- [x] Add timeout and cancellation support where appropriate
 
 ### 3. Generated Protocol Boundary
 

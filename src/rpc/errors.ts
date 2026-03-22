@@ -36,3 +36,25 @@ export class RpcResponseError extends RpcError {
     this.id = id;
   }
 }
+
+export class RpcRequestTimeoutError extends RpcError {
+  readonly method: string;
+  readonly timeoutMs: number;
+
+  public constructor(method: string, timeoutMs: number) {
+    super(`RPC request "${method}" timed out after ${timeoutMs} ms.`);
+    this.name = "RpcRequestTimeoutError";
+    this.method = method;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export class RpcRequestAbortedError extends RpcError {
+  readonly method: string;
+
+  public constructor(method: string, options?: ErrorOptions) {
+    super(`RPC request "${method}" was aborted.`, options);
+    this.name = "RpcRequestAbortedError";
+    this.method = method;
+  }
+}

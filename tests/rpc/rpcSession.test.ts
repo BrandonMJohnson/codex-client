@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   RpcError,
+  RpcRequestAbortedError,
+  RpcRequestTimeoutError,
   RpcProtocolError,
   RpcResponseError,
   RpcSession,
@@ -254,6 +256,120 @@ describe("RpcSession", () => {
 
     await expect(pendingInitialize).rejects.toBeInstanceOf(RpcError);
     expect(session.initializationState).toBe("closed");
+  });
+
+  it("times out initialize requests and closes the session because handshake state is no longer trustworthy", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = new FakeTransport();
+      const session = new RpcSession({ transport });
+      const closeEvents: Array<Error | undefined> = [];
+
+      session.onClose((error) => {
+        closeEvents.push(error);
+      });
+
+      await session.start();
+
+      const timedOutInitialize = session.request("initialize", undefined, {
+        timeoutMs: 25
+      });
+      void timedOutInitialize.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(timedOutInitialize).rejects.toBeInstanceOf(
+        RpcRequestTimeoutError
+      );
+      expect(session.initializationState).toBe("closed");
+      expect(closeEvents).toHaveLength(1);
+
+      await expect(session.request("initialize")).rejects.toBeInstanceOf(
+        RpcStateError
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects aborted requests and closes the session because late replies remain possible", async () => {
+    const transport = new FakeTransport();
+    const session = new RpcSession({ transport });
+    const closeEvents: Array<Error | undefined> = [];
+
+    session.onClose((error) => {
+      closeEvents.push(error);
+    });
+
+    await session.start();
+
+    const initialize = session.request("initialize");
+    transport.emitMessage({ id: 1, result: null });
+    await initialize;
+    await session.initialized();
+
+    const controller = new AbortController();
+    const modelList = session.request("model/list", undefined, {
+      signal: controller.signal
+    });
+    void modelList.catch(() => {});
+
+    controller.abort(new Error("caller cancelled"));
+
+    await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
+    expect(session.initializationState).toBe("closed");
+    expect(closeEvents).toHaveLength(1);
+  });
+
+  it("times out post-initialize requests and closes the session for the same reason", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = new FakeTransport();
+      const session = new RpcSession({ transport });
+      const closeEvents: Array<Error | undefined> = [];
+
+      session.onClose((error) => {
+        closeEvents.push(error);
+      });
+
+      await session.start();
+
+      const initialize = session.request("initialize");
+      transport.emitMessage({ id: 1, result: null });
+      await initialize;
+      await session.initialized();
+
+      const modelList = session.request("model/list", undefined, {
+        timeoutMs: 25
+      });
+      void modelList.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(modelList).rejects.toBeInstanceOf(RpcRequestTimeoutError);
+      expect(session.initializationState).toBe("closed");
+      expect(closeEvents).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects already-aborted requests before sending anything", async () => {
+    const transport = new FakeTransport();
+    const session = new RpcSession({ transport });
+    const controller = new AbortController();
+
+    controller.abort();
+
+    await session.start();
+
+    await expect(
+      session.request("initialize", undefined, { signal: controller.signal })
+    ).rejects.toBeInstanceOf(RpcRequestAbortedError);
+    expect(transport.sentMessages).toEqual([]);
+    expect(session.initializationState).toBe("preInitialize");
   });
 
   it("reports clean closes without an error payload", async () => {

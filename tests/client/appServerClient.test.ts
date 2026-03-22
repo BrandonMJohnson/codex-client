@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
@@ -24,6 +24,8 @@ import {
   type FsWriteFileResponse,
   type GetAccountRateLimitsResponse,
   type GetAccountResponse,
+  RpcRequestAbortedError,
+  RpcRequestTimeoutError,
   RpcResponseError,
   RpcStateError,
   type InitializeParams,
@@ -282,6 +284,72 @@ describe("AppServerClient", () => {
       platformFamily: "unix",
       platformOs: "linux"
     });
+  });
+
+  it("forwards timeout and abort request options through the client helpers", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const initializeTransport = new FakeTransport();
+      const initializeClient = new AppServerClient({
+        transport: initializeTransport,
+        defaultRequestTimeoutMs: 20
+      });
+
+      const timedOutInitialize = initializeClient.initialize(
+        createInitializeParams(),
+        {
+          sendInitialized: false
+        }
+      );
+      void timedOutInitialize.catch(() => {});
+      await flushAsyncWork();
+      await vi.advanceTimersByTimeAsync(20);
+
+      await expect(timedOutInitialize).rejects.toBeInstanceOf(
+        RpcRequestTimeoutError
+      );
+      expect(initializeClient.initializationState).toBe("closed");
+
+      await expect(
+        initializeClient.initialize(createInitializeParams(), {
+          sendInitialized: false
+        })
+      ).rejects.toBeInstanceOf(RpcStateError);
+
+      const transport = new FakeTransport();
+      const client = new AppServerClient({
+        transport
+      });
+
+      const initialize = client.initialize(createInitializeParams(), {
+        sendInitialized: false
+      });
+      await flushAsyncWork();
+      transport.emitMessage({
+        id: 1,
+        result: {
+          userAgent: "codex",
+          platformFamily: "unix",
+          platformOs: "linux"
+        }
+      });
+      await initialize;
+      await client.initialized();
+
+      const controller = new AbortController();
+      const modelList = client.modelList({}, { signal: controller.signal });
+      await flushAsyncWork();
+      void modelList.catch(() => {});
+      controller.abort();
+
+      await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
+      expect(client.initializationState).toBe("closed");
+
+      await expect(client.modelList()).rejects.toBeInstanceOf(RpcStateError);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes raw notifications and server requests through the client surface", async () => {

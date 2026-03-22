@@ -10,6 +10,8 @@ import type {
 
 import {
   RpcError,
+  RpcRequestAbortedError,
+  RpcRequestTimeoutError,
   RpcProtocolError,
   RpcResponseError,
   RpcStateError
@@ -41,6 +43,7 @@ type PendingRequest = {
   readonly method: string;
   readonly resolve: (value: JsonValue) => void;
   readonly reject: (reason: Error) => void;
+  readonly dispose: () => void;
 };
 
 export interface RpcInboundRequest extends RpcRequestMessage {
@@ -59,6 +62,12 @@ export type RpcSessionCloseListener = (error?: Error) => void;
 export interface RpcSessionOptions {
   readonly transport: Transport;
   readonly requestIdFactory?: () => RpcId;
+  readonly defaultRequestTimeoutMs?: number;
+}
+
+export interface RpcRequestOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
 }
 
 export class RpcSession {
@@ -69,6 +78,7 @@ export class RpcSession {
   readonly #requestListeners = new ListenerSet<RpcRequestListener>();
   readonly #transport: Transport;
   readonly #requestIdFactory: () => RpcId;
+  readonly #defaultRequestTimeoutMs: number | undefined;
 
   #closeHandled = false;
   #initializationState: InitializationState = "preInitialize";
@@ -82,6 +92,10 @@ export class RpcSession {
     this.#transport = options.transport;
     this.#requestIdFactory =
       options.requestIdFactory ?? (() => this.#nextRequestId++);
+    this.#defaultRequestTimeoutMs = normalizeTimeoutMs(
+      options.defaultRequestTimeoutMs,
+      "defaultRequestTimeoutMs"
+    );
   }
 
   public get state(): TransportState {
@@ -122,27 +136,72 @@ export class RpcSession {
 
   public async request(
     method: string,
-    params?: JsonValue
+    params?: JsonValue,
+    options: RpcRequestOptions = {}
   ): Promise<JsonValue> {
     this.#ensureOpen();
+    const timeoutMs = normalizeTimeoutMs(
+      options.timeoutMs ?? this.#defaultRequestTimeoutMs,
+      "timeoutMs"
+    );
+
+    if (options.signal?.aborted) {
+      throw createRequestAbortedError(method, options.signal.reason);
+    }
+
     this.#prepareClientMethod(method);
 
     const id = this.#requestIdFactory();
     const message = createRequestMessage(id, method, params);
 
     return await new Promise<JsonValue>((resolve, reject) => {
+      const disposeCallbacks: Array<() => void> = [];
+      const dispose = (): void => {
+        for (const callback of disposeCallbacks) {
+          callback();
+        }
+      };
+
       this.#pendingRequests.set(id, {
         method,
         resolve,
-        reject
+        reject,
+        dispose
       });
+
+      if (options.signal) {
+        const abortPendingRequest = (): void => {
+          this.#cancelPendingRequest(
+            id,
+            createRequestAbortedError(method, options.signal?.reason)
+          );
+        };
+
+        options.signal.addEventListener("abort", abortPendingRequest, {
+          once: true
+        });
+        disposeCallbacks.push(() => {
+          options.signal?.removeEventListener("abort", abortPendingRequest);
+        });
+      }
+
+      if (timeoutMs !== undefined) {
+        const timeoutHandle = setTimeout(() => {
+          this.#cancelPendingRequest(
+            id,
+            new RpcRequestTimeoutError(method, timeoutMs)
+          );
+        }, timeoutMs);
+        timeoutHandle.unref?.();
+        disposeCallbacks.push(() => {
+          clearTimeout(timeoutHandle);
+        });
+      }
 
       this.#transport
         .send(asJsonValueObject(message))
         .catch((error: unknown) => {
-          this.#pendingRequests.delete(id);
-          this.#rollbackInitializationAfterSendFailure(method);
-          reject(asError(error));
+          this.#failPendingRequest(id, asError(error));
         });
     });
   }
@@ -290,6 +349,7 @@ export class RpcSession {
     }
 
     this.#pendingRequests.delete(message.id);
+    pendingRequest.dispose();
 
     if ("error" in message) {
       if (pendingRequest.method === "initialize") {
@@ -323,6 +383,47 @@ export class RpcSession {
     this.#errorListeners.notify(error);
   }
 
+  #cancelPendingRequest(id: RpcId, error: Error): void {
+    const pendingRequest = this.#pendingRequests.get(id);
+    if (!pendingRequest) {
+      return;
+    }
+
+    this.#pendingRequests.delete(id);
+    pendingRequest.dispose();
+    pendingRequest.reject(error);
+
+    if (pendingRequest.method === "initialize") {
+      // Once initialize has been written to the transport, the client cannot
+      // tell whether the server accepted it before the local timeout/abort.
+      // Closing the session avoids sending a second initialize on a connection
+      // whose handshake state may already have diverged.
+      this.#finalizeClose(error);
+      void this.#transport.close();
+      return;
+    }
+
+    // The protocol has no request-cancellation message. Once a request has been
+    // sent, abandoning it locally means a valid server response can still show
+    // up later. Closing the session is the only protocol-safe way to avoid
+    // misclassifying that late response or drifting out of sync with the
+    // server's view of outstanding request ids.
+    this.#finalizeClose(error);
+    void this.#transport.close();
+  }
+
+  #failPendingRequest(id: RpcId, error: Error): void {
+    const pendingRequest = this.#pendingRequests.get(id);
+    if (!pendingRequest) {
+      return;
+    }
+
+    this.#pendingRequests.delete(id);
+    pendingRequest.dispose();
+    this.#rollbackInitializationAfterSendFailure(pendingRequest.method);
+    pendingRequest.reject(error);
+  }
+
   #finalizeClose(error?: Error): void {
     if (this.#closeHandled) {
       return;
@@ -334,6 +435,7 @@ export class RpcSession {
 
     const closeError = error ?? new RpcError("RPC session closed.");
     for (const pendingRequest of this.#pendingRequests.values()) {
+      pendingRequest.dispose();
       pendingRequest.reject(closeError);
     }
 
@@ -503,4 +605,27 @@ function createErrorObject(
   }
 
   return { code, message, data };
+}
+
+function normalizeTimeoutMs(
+  value: number | undefined,
+  optionName: string
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`RPC ${optionName} must be a finite number >= 0.`);
+  }
+
+  return value;
+}
+
+function createRequestAbortedError(
+  method: string,
+  reason: unknown
+): RpcRequestAbortedError {
+  const cause = reason instanceof Error ? reason : undefined;
+  return new RpcRequestAbortedError(method, cause ? { cause } : undefined);
 }
