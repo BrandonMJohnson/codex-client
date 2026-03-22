@@ -79,7 +79,13 @@ export default defineConfig({
       "/reference/": [
         {
           text: "Reference",
-          items: [{ text: "API Surface", link: "/reference/" }]
+          items: [
+            { text: "API Surface", link: "/reference/" },
+            {
+              text: "AppServerClient",
+              link: "/reference/app-server-client"
+            }
+          ]
         }
       ]
     },
