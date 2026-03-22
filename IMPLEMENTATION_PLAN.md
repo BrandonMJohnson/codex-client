@@ -25,6 +25,8 @@ The protocol details in this plan are derived from that README, including:
 
 ### 2026-03-22
 
+- Confirmed the repository has effectively standardized on npm, `tsc`-driven builds, and a Node.js `24+` ESM-only runtime target, then aligned the roadmap to reflect those already-landed decisions.
+- Verified publish readiness against npm by confirming `codex-app-server-client` is currently unclaimed on the npm registry and by running a successful `npm publish --dry-run`; an actual manual publish still requires npm's write-time OTP flow or a trusted-publisher setup.
 - Clarified that the published package surface is root-only, with subpath imports intentionally unsupported, and tightened the package smoke test so it enforces that contract from the packed tarball.
 - Made the package's ESM-only support policy explicit in the docs and packaging checks, including verification that CommonJS `require()` is not a supported consumption path.
 - Added a lightweight release workflow with a seeded `CHANGELOG.md`, a `RELEASING.md` guide, a `release:check` script, and a manual CI-backed release gate so release candidates can be validated before tagging.
@@ -167,7 +169,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
   "scripts": {
     "bindings:generate": "tsx scripts/generate-bindings.ts",
     "bindings:check": "tsx scripts/check-bindings.ts",
-    "build": "tsup src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   }
 }
@@ -297,9 +299,9 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ## Open Decisions
 
-- [ ] Confirm package manager (`pnpm`, `npm`, or `yarn`)
-- [ ] Confirm build tool (`tsup`, `unbuild`, or alternative)
-- [ ] Confirm runtime target(s) and Node version support
+- [x] Confirm package manager (`pnpm`, `npm`, or `yarn`)
+- [x] Confirm build tool (`tsup`, `unbuild`, or alternative)
+- [x] Confirm runtime target(s) and Node version support
 - [ ] Confirm whether websocket support belongs in v1 or post-v1
 - [ ] Confirm whether experimental APIs should ship in the same package surface or a submodule
 
@@ -309,4 +311,4 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - The README makes `stdio` the best default target for the first implementation.
 - Approval and incoming request handling are mandatory parts of a real client, not optional extras.
 - The binding regeneration workflow should be part of the normal development loop so protocol drift is caught early.
-- Current implementation assumes npm because it is available locally in this workspace; `pnpm` and `yarn` are not installed here today.
+- The repository now standardizes on npm for dependency management and scripts; `pnpm` and `yarn` are not part of the supported workflow today.
