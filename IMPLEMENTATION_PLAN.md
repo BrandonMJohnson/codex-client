@@ -50,7 +50,7 @@ The protocol details in this plan are derived from that README, including:
 - Tightened the repo workflow guidance so contributors always fast-forward local `main` before creating a new feature branch.
 - Added a first-pass `client.command.*` namespace covering `command/exec`, `command/exec/write`, `command/exec/resize`, and `command/exec/terminate`, with focused unit coverage plus a real stdio integration check for buffered standalone command execution.
 - Added a first-pass `client.fs.*` namespace covering `fs/readFile`, `fs/writeFile`, `fs/createDirectory`, `fs/getMetadata`, `fs/readDirectory`, `fs/remove`, and `fs/copy`, with focused unit coverage plus a real stdio integration flow against `codex app-server`.
-- Added a first-pass `client.account.*` namespace covering `account/read`, `account/login/start`, `account/login/cancel`, `account/logout`, and `account/rateLimits/read`, with focused unit coverage plus a real stdio integration check for account reads and rate-limit snapshots.
+- Added a first-pass `client.account.*` namespace covering `account/read`, `account/login/start`, `account/login/cancel`, `account/logout`, and `account/rateLimits/read`, with focused unit coverage plus real stdio integration checks for account reads, rate-limit snapshots, live login-start/cancel flows, and an opt-in logout flow.
 
 ## Architectural Direction
 
