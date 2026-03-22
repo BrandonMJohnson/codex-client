@@ -23,6 +23,11 @@ The protocol details in this plan are derived from that README, including:
 
 ## Progress Notes
 
+### 2026-03-22
+
+- Rewrote the README so it reads like an open source project entrypoint instead of an internal progress note, adding clearer positioning, requirements, quick-start usage, API overview, event-model documentation, approval/request examples, binding guidance, and contributor-oriented development instructions.
+- Aligned the implementation checklist with already-landed work by marking experimental bindings support, ergonomic helpers, and docs/examples progress more accurately.
+
 ### 2026-03-21
 
 - Bootstrapped the package with npm-compatible TypeScript and Vitest tooling.
@@ -220,7 +225,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 - [ ] Add connection-level `experimentalApi` opt-in support
 - [ ] Gate experimental methods and features in the client surface
-- [ ] Add support for experimental bindings alongside stable bindings
+- [x] Add support for experimental bindings alongside stable bindings
 - [ ] Add websocket transport only after stable `stdio` support lands
 - [ ] Add support for dynamic tools and realtime events later
 
@@ -229,7 +234,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Add high-level helpers for common thread + turn flows
 - [x] Add helper APIs for streamed turn consumption
 - [x] Add helper APIs for approval handling
-- [ ] Keep helpers optional so low-level protocol access stays available
+- [x] Keep helpers optional so low-level protocol access stays available
 
 ### 9. Testing
 
@@ -265,7 +270,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ## Phase 2: Experimental Support
 
-- [ ] Add experimental bindings
+- [x] Add experimental bindings
 - [ ] Add runtime `experimentalApi` opt-in
 - [ ] Add websocket transport
 - [ ] Add dynamic tool support
@@ -273,8 +278,8 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ## Phase 3: Developer Experience And Hardening
 
-- [ ] Add ergonomic helper APIs
-- [ ] Improve docs and examples
+- [x] Add ergonomic helper APIs
+- [x] Improve docs and examples
 - [x] Add stronger CI validation around generated bindings
 - [ ] Finalize release packaging
 - [ ] Publish the package
