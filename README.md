@@ -44,6 +44,37 @@ id. It tolerates missing intermediate notifications such as `turn/started` when
 the connection has opted out of those methods, but it still depends on
 `turn/completed` to know when the run is finished.
 
+## Thread Helper
+
+`client.thread.run()` starts a thread and immediately runs the initial turn on
+that thread.
+
+```ts
+const run = await client.thread.run({
+  thread: {
+    cwd,
+    experimentalRawEvents: false,
+    persistExtendedHistory: false
+  },
+  turn: {
+    input: [
+      {
+        type: "text",
+        text: "Reply with exactly helper-check.",
+        text_elements: []
+      }
+    ]
+  }
+});
+
+const threadId = run.thread.thread.id;
+const turnId = run.turn.start.turn.id;
+```
+
+The helper returns both the immediate `thread/start` response and the streamed
+turn result so callers can treat the initial conversation setup as one
+operation while still retaining the lower-level responses.
+
 ## Local Development
 
 Install dependencies:

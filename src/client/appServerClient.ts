@@ -12,6 +12,12 @@ import {
   type AppServerClientTurnRunOptions,
   type AppServerClientTurnRunResult
 } from "./turnRun.js";
+import {
+  runThreadWithInitialTurn,
+  type AppServerClientThreadRunParams,
+  type AppServerClientThreadRunOptions,
+  type AppServerClientThreadRunResult
+} from "./threadRun.js";
 import type {
   Account,
   AppInfo,
@@ -322,6 +328,17 @@ export interface AppServerClientAccountApi {
 }
 
 export interface AppServerClientThreadApi {
+  /**
+   * Start a thread and immediately run the first streamed turn on it.
+   *
+   * This is a thin composition helper: the thread start response provides the
+   * thread id that is then threaded into `turn.run()` so callers do not have to
+   * manually stitch the two calls together.
+   */
+  run(
+    params: AppServerClientThreadRunParams,
+    options?: AppServerClientThreadRunOptions
+  ): Promise<AppServerClientThreadRunResult>;
   start(
     params: ThreadStartParams,
     options?: AppServerClientRequestOptions
@@ -535,7 +552,9 @@ export class AppServerClient {
       list: async (params = {}, options) =>
         await this.#request("thread/list", params, options),
       loadedList: async (params = {}, options) =>
-        await this.#request("thread/loaded/list", params, options)
+        await this.#request("thread/loaded/list", params, options),
+      run: async (params, options) =>
+        await runThreadWithInitialTurn(this, params, options)
     };
     this.turn = {
       start: async (params, options) =>
@@ -544,7 +563,8 @@ export class AppServerClient {
         await this.#request("turn/steer", params, options),
       interrupt: async (params, options) =>
         await this.#request("turn/interrupt", params, options),
-      run: async (params, options) => await runTurnWithStream(this, params, options)
+      run: async (params, options) =>
+        await runTurnWithStream(this, params, options)
     };
     this.command = {
       exec: async (params, options) =>

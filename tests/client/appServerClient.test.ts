@@ -1195,6 +1195,197 @@ describe("AppServerClient", () => {
     });
   });
 
+  it("runs a thread and its initial streamed turn through the thread namespace", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const streamedMethods: string[] = [];
+    const threadStartResponse = createThreadStartResponse(createThread("thread-1"));
+    const turnStartResponse = createTurnStartResponse(
+      createTurn("turn-1", "inProgress")
+    );
+    const turnStartedEvent: AppServerClientNotificationOf<"turn/started"> = {
+      method: "turn/started",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-1", "inProgress")
+      }
+    };
+    const itemStartedEvent: AppServerClientNotificationOf<"item/started"> = {
+      method: "item/started",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "agentMessage",
+          id: "item-1",
+          text: "Thread helper complete.",
+          phase: null,
+          memoryCitation: null
+        }
+      }
+    };
+    const firstDeltaEvent: AppServerClientNotificationOf<"item/agentMessage/delta"> =
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          delta: "Thread helper "
+        }
+      };
+    const secondDeltaEvent: AppServerClientNotificationOf<"item/agentMessage/delta"> =
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          delta: "complete."
+        }
+      };
+    const itemCompletedEvent: AppServerClientNotificationOf<"item/completed"> = {
+      method: "item/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "agentMessage",
+          id: "item-1",
+          text: "Thread helper complete.",
+          phase: null,
+          memoryCitation: null
+        }
+      }
+    };
+    const turnCompletedEvent: AppServerClientNotificationOf<"turn/completed"> = {
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-1", "completed")
+      }
+    };
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.thread.run(
+      {
+        thread: {
+          cwd: "/workspace",
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        },
+        turn: {
+          input: [
+            {
+              type: "text",
+              text: "Run the helper turn.",
+              text_elements: []
+            }
+          ],
+          effort: "low"
+        }
+      },
+      {
+        request: {
+          timeoutMs: 1_000
+        },
+        turn: {
+          onEvent: (event) => {
+            streamedMethods.push(event.method);
+          }
+        }
+      }
+    );
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
+
+    transport.emitMessage({
+      id: 2,
+      result: threadStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Run the helper turn.",
+            text_elements: []
+          }
+        ],
+        effort: "low"
+      }
+    });
+
+    transport.emitMessage({
+      id: 3,
+      result: turnStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage(turnStartedEvent as unknown as JsonValue);
+    transport.emitMessage(itemStartedEvent as unknown as JsonValue);
+    transport.emitMessage(firstDeltaEvent as unknown as JsonValue);
+    transport.emitMessage(secondDeltaEvent as unknown as JsonValue);
+    transport.emitMessage(itemCompletedEvent as unknown as JsonValue);
+    transport.emitMessage(turnCompletedEvent as unknown as JsonValue);
+
+    await expect(run).resolves.toEqual({
+      thread: threadStartResponse,
+      turn: {
+        start: turnStartResponse,
+        started: turnStartedEvent,
+        completed: turnCompletedEvent,
+        events: [
+          turnStartedEvent,
+          itemStartedEvent,
+          firstDeltaEvent,
+          secondDeltaEvent,
+          itemCompletedEvent,
+          turnCompletedEvent
+        ],
+        completedItems: [itemCompletedEvent.params.item],
+        agentMessageDeltas: {
+          "item-1": "Thread helper complete."
+        }
+      }
+    });
+    expect(streamedMethods).toEqual([
+      "turn/started",
+      "item/started",
+      "item/agentMessage/delta",
+      "item/agentMessage/delta",
+      "item/completed",
+      "turn/completed"
+    ]);
+  });
+
   it("routes turn namespace helpers to the stable turn RPC methods", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });

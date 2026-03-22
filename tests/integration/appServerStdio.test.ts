@@ -771,6 +771,99 @@ describe("codex app-server stdio integration", () => {
   );
 
   itIfCodex(
+    "runs a thread helper that starts the thread and initial turn against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const run = await client.thread.run(
+          {
+            thread: {
+              cwd: process.cwd(),
+              ...(preferredModel ? { model: preferredModel } : {}),
+              experimentalRawEvents: false,
+              persistExtendedHistory: false
+            },
+            turn: {
+              ...(preferredModel ? { model: preferredModel } : {}),
+              effort: "low",
+              input: [
+                {
+                  type: "text",
+                  text: "Reply with the exact text thread-helper-check.",
+                  text_elements: []
+                }
+              ]
+            }
+          },
+          {
+            turn: {
+              completionTimeoutMs: 45_000
+            }
+          }
+        );
+
+        const completedAgentMessage = run.turn.completedItems.find(
+          (item) => item.type === "agentMessage"
+        );
+
+        expect(run.thread.thread.id).toBe(run.turn.completed.params.threadId);
+        expect(run.turn.start.turn.id).toBe(run.turn.completed.params.turn.id);
+        expect(run.turn.completed.params.turn.status).toBe("completed");
+        expect(run.turn.events[run.turn.events.length - 1]?.method).toBe(
+          "turn/completed"
+        );
+        expect(completedAgentMessage?.type).toBe("agentMessage");
+
+        if (completedAgentMessage?.type !== "agentMessage") {
+          throw new Error("Expected the helper run to complete an agentMessage item.");
+        }
+
+        const streamedText = normalizeNotificationText(
+          run.turn.agentMessageDeltas[completedAgentMessage.id] ?? ""
+        );
+        const completedText = normalizeNotificationText(completedAgentMessage.text);
+
+        expect(completedText).toContain("thread-helper-check");
+        expect(streamedText.length).toBeGreaterThan(0);
+        expect(completedText).toContain(streamedText);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
     "suppresses opted-out turn and delta notifications against a real app-server",
     async () => {
       const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
