@@ -41,13 +41,21 @@ The active roadmap lives in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
 The package is ESM-only and currently targets Node.js `>=24`.
 
-If you are consuming the repository directly:
+The package is not published to npm yet.
+
+For local development from a checkout:
 
 ```bash
-npm install
+npm ci
 ```
 
-If you are wiring it into another project before the first npm release, install from a git checkout or local path.
+For consumption from another project before the first npm release, install from a git URL, or from a local path that has already been bootstrapped with `npm ci`. The package runs `prepare` during install so the built `dist/` entrypoint is generated automatically once the source checkout has the build toolchain available.
+
+```bash
+cd /path/to/codex-client
+npm ci
+npm install /path/to/codex-client
+```
 
 ## Requirements
 
@@ -300,7 +308,7 @@ Protocol bindings are generated and committed on purpose.
 
 - Handwritten runtime code lives under `src/client/`, `src/rpc/`, `src/transport/`, and `src/protocol/`
 - Generated TypeScript bindings live under `src/generated/`
-- Generated JSON Schemas live under `schemas/`
+- Generated JSON Schemas live under `schemas/` in the repository for development and regeneration checks; they are not currently part of the published package surface
 
 Useful commands:
 
