@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   RpcError,
+  RpcRequestAbortedError,
+  RpcRequestTimeoutError,
   RpcProtocolError,
   RpcResponseError,
   RpcSession,
@@ -254,6 +256,87 @@ describe("RpcSession", () => {
 
     await expect(pendingInitialize).rejects.toBeInstanceOf(RpcError);
     expect(session.initializationState).toBe("closed");
+  });
+
+  it("times out pending requests, ignores the late response, and allows initialize retries", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = new FakeTransport();
+      const session = new RpcSession({ transport });
+
+      await session.start();
+
+      const timedOutInitialize = session.request("initialize", undefined, {
+        timeoutMs: 25
+      });
+      void timedOutInitialize.catch(() => {});
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(timedOutInitialize).rejects.toBeInstanceOf(
+        RpcRequestTimeoutError
+      );
+      expect(session.initializationState).toBe("preInitialize");
+
+      transport.emitMessage({ id: 1, result: null });
+
+      const retry = session.request("initialize");
+      transport.emitMessage({ id: 2, result: null });
+
+      await expect(retry).resolves.toBeNull();
+      expect(session.initializationState).toBe("initializeReady");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects aborted requests and does not treat their late responses as protocol errors", async () => {
+    const transport = new FakeTransport();
+    const session = new RpcSession({ transport });
+    const errors: Error[] = [];
+
+    session.onError((error) => {
+      errors.push(error);
+    });
+
+    await session.start();
+
+    const initialize = session.request("initialize");
+    transport.emitMessage({ id: 1, result: null });
+    await initialize;
+    await session.initialized();
+
+    const controller = new AbortController();
+    const modelList = session.request("model/list", undefined, {
+      signal: controller.signal
+    });
+    void modelList.catch(() => {});
+
+    controller.abort(new Error("caller cancelled"));
+
+    await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
+
+    transport.emitMessage({ id: 2, result: ["gpt-5.4"] });
+
+    expect(errors).toEqual([]);
+    expect(session.initializationState).toBe("initialized");
+  });
+
+  it("rejects already-aborted requests before sending anything", async () => {
+    const transport = new FakeTransport();
+    const session = new RpcSession({ transport });
+    const controller = new AbortController();
+
+    controller.abort();
+
+    await session.start();
+
+    await expect(
+      session.request("initialize", undefined, { signal: controller.signal })
+    ).rejects.toBeInstanceOf(RpcRequestAbortedError);
+    expect(transport.sentMessages).toEqual([]);
+    expect(session.initializationState).toBe("preInitialize");
   });
 
   it("reports clean closes without an error payload", async () => {

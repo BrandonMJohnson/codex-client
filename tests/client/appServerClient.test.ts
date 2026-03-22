@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
@@ -24,6 +24,8 @@ import {
   type FsWriteFileResponse,
   type GetAccountRateLimitsResponse,
   type GetAccountResponse,
+  RpcRequestAbortedError,
+  RpcRequestTimeoutError,
   RpcResponseError,
   RpcStateError,
   type InitializeParams,
@@ -282,6 +284,64 @@ describe("AppServerClient", () => {
       platformFamily: "unix",
       platformOs: "linux"
     });
+  });
+
+  it("forwards timeout and abort request options through the client helpers", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = new FakeTransport();
+      const client = new AppServerClient({
+        transport,
+        defaultRequestTimeoutMs: 20
+      });
+
+      const timedOutInitialize = client.initialize(createInitializeParams(), {
+        sendInitialized: false
+      });
+      void timedOutInitialize.catch(() => {});
+      await flushAsyncWork();
+      await vi.advanceTimersByTimeAsync(20);
+
+      await expect(timedOutInitialize).rejects.toBeInstanceOf(
+        RpcRequestTimeoutError
+      );
+
+      const retry = client.initialize(createInitializeParams(), {
+        sendInitialized: false,
+        request: { timeoutMs: 50 }
+      });
+      await flushAsyncWork();
+      transport.emitMessage({
+        id: 2,
+        result: {
+          userAgent: "codex",
+          platformFamily: "unix",
+          platformOs: "linux"
+        }
+      });
+      await retry;
+      await client.initialized();
+
+      const controller = new AbortController();
+      const modelList = client.modelList({}, { signal: controller.signal });
+      await flushAsyncWork();
+      void modelList.catch(() => {});
+      controller.abort();
+
+      await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
+      transport.emitMessage({
+        id: 3,
+        result: {
+          data: [],
+          nextCursor: null
+        }
+      });
+
+      expect(client.initializationState).toBe("initialized");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes raw notifications and server requests through the client surface", async () => {

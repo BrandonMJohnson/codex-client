@@ -1,4 +1,5 @@
 import {
+  type RpcRequestOptions,
   RpcSession,
   type RpcErrorObject,
   RpcStateError,
@@ -275,46 +276,72 @@ export type AppServerClientRequestHandler<
   | AppServerClientRequestResponseOf<Method>
   | Promise<AppServerClientRequestResponseOf<Method>>;
 
+export interface AppServerClientRequestOptions extends RpcRequestOptions {}
+
 export interface AppServerClientAccountApi {
   /**
    * Read the currently active account session. The helper defaults
    * `refreshToken` to `false` so callers opt into refresh work explicitly.
    */
-  read(params?: GetAccountParams): Promise<GetAccountResponse>;
+  read(
+    params?: GetAccountParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<GetAccountResponse>;
   /**
    * Start an account login flow for API keys, browser-based ChatGPT auth, or
    * externally managed ChatGPT auth tokens.
    */
-  loginStart(params: LoginAccountParams): Promise<LoginAccountResponse>;
+  loginStart(
+    params: LoginAccountParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<LoginAccountResponse>;
   /**
    * Cancel a previously started browser-based ChatGPT login flow.
    */
   loginCancel(
-    params: CancelLoginAccountParams
+    params: CancelLoginAccountParams,
+    options?: AppServerClientRequestOptions
   ): Promise<CancelLoginAccountResponse>;
   /**
    * Clear any currently active account session from the server process.
    */
-  logout(): Promise<LogoutAccountResponse>;
+  logout(
+    options?: AppServerClientRequestOptions
+  ): Promise<LogoutAccountResponse>;
   /**
    * Read the current rate-limit snapshot for the active account session.
    */
-  rateLimitsRead(): Promise<GetAccountRateLimitsResponse>;
+  rateLimitsRead(
+    options?: AppServerClientRequestOptions
+  ): Promise<GetAccountRateLimitsResponse>;
 }
 
 export interface AppServerClientThreadApi {
-  start(params: ThreadStartParams): Promise<ThreadStartResponse>;
+  start(
+    params: ThreadStartParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<ThreadStartResponse>;
   /**
    * Resume reloads an existing thread from persisted rollout history. The
    * server may reject ids for freshly started threads that have not produced a
    * resumable rollout yet, so callers should treat thread ids as resumable only
    * after the backing session has been materialized by the server.
    */
-  resume(params: ThreadResumeParams): Promise<ThreadResumeResponse>;
-  read(params: ThreadReadParams): Promise<ThreadReadResponse>;
-  list(params?: ThreadListParams): Promise<ThreadListResponse>;
+  resume(
+    params: ThreadResumeParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<ThreadResumeResponse>;
+  read(
+    params: ThreadReadParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<ThreadReadResponse>;
+  list(
+    params?: ThreadListParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<ThreadListResponse>;
   loadedList(
-    params?: ThreadLoadedListParams
+    params?: ThreadLoadedListParams,
+    options?: AppServerClientRequestOptions
   ): Promise<ThreadLoadedListResponse>;
 }
 
@@ -325,18 +352,27 @@ export interface AppServerClientTurnApi {
    * should usually pair this with notification handling when they need to wait
    * for completion.
    */
-  start(params: TurnStartParams): Promise<TurnStartResponse>;
+  start(
+    params: TurnStartParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<TurnStartResponse>;
   /**
    * Steer adds more user input to the currently active turn. Callers must pass
    * the active turn id they expect so the server can reject stale steering
    * attempts after the turn has already advanced or completed.
    */
-  steer(params: TurnSteerParams): Promise<TurnSteerResponse>;
+  steer(
+    params: TurnSteerParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<TurnSteerResponse>;
   /**
    * Interrupt asks the server to stop an in-progress turn. Completion still
    * arrives asynchronously via later notifications or a follow-up thread read.
    */
-  interrupt(params: TurnInterruptParams): Promise<TurnInterruptResponse>;
+  interrupt(
+    params: TurnInterruptParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<TurnInterruptResponse>;
 }
 
 export interface AppServerClientCommandApi {
@@ -347,25 +383,33 @@ export interface AppServerClientCommandApi {
    * stdin writes, PTY resizing, termination, or streamed output must supply a
    * stable connection-scoped `processId` on the initial request.
    */
-  exec(params: CommandExecParams): Promise<CommandExecResponse>;
+  exec(
+    params: CommandExecParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<CommandExecResponse>;
   /**
    * Write base64-encoded stdin bytes to a previously started command session,
    * optionally closing stdin after the write.
    */
-  write(params: CommandExecWriteParams): Promise<CommandExecWriteResponse>;
+  write(
+    params: CommandExecWriteParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<CommandExecWriteResponse>;
   /**
    * Resize the PTY for a previously started command session.
    *
    * This is only meaningful for commands that were started with `tty: true`.
    */
   resize(
-    params: CommandExecResizeParams
+    params: CommandExecResizeParams,
+    options?: AppServerClientRequestOptions
   ): Promise<CommandExecResizeResponse>;
   /**
    * Terminate a previously started command session identified by `processId`.
    */
   terminate(
-    params: CommandExecTerminateParams
+    params: CommandExecTerminateParams,
+    options?: AppServerClientRequestOptions
   ): Promise<CommandExecTerminateResponse>;
 }
 
@@ -373,41 +417,59 @@ export interface AppServerClientFsApi {
   /**
    * Read a file from the host filesystem as a base64 payload.
    */
-  readFile(params: FsReadFileParams): Promise<FsReadFileResponse>;
+  readFile(
+    params: FsReadFileParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<FsReadFileResponse>;
   /**
    * Write a full base64 payload to a file on the host filesystem.
    */
-  writeFile(params: FsWriteFileParams): Promise<FsWriteFileResponse>;
+  writeFile(
+    params: FsWriteFileParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<FsWriteFileResponse>;
   /**
    * Create a directory on the host filesystem.
    */
   createDirectory(
-    params: FsCreateDirectoryParams
+    params: FsCreateDirectoryParams,
+    options?: AppServerClientRequestOptions
   ): Promise<FsCreateDirectoryResponse>;
   /**
    * Inspect whether a path currently resolves to a file or directory and read
    * its available timestamps.
    */
-  getMetadata(params: FsGetMetadataParams): Promise<FsGetMetadataResponse>;
+  getMetadata(
+    params: FsGetMetadataParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<FsGetMetadataResponse>;
   /**
    * List the direct children of a directory.
    */
   readDirectory(
-    params: FsReadDirectoryParams
+    params: FsReadDirectoryParams,
+    options?: AppServerClientRequestOptions
   ): Promise<FsReadDirectoryResponse>;
   /**
    * Remove a file or directory tree from the host filesystem.
    */
-  remove(params: FsRemoveParams): Promise<FsRemoveResponse>;
+  remove(
+    params: FsRemoveParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<FsRemoveResponse>;
   /**
    * Copy a file or directory tree on the host filesystem.
    */
-  copy(params: FsCopyParams): Promise<FsCopyResponse>;
+  copy(
+    params: FsCopyParams,
+    options?: AppServerClientRequestOptions
+  ): Promise<FsCopyResponse>;
 }
 
 export interface AppServerClientOptions {
   readonly transport: Transport;
   readonly requestIdFactory?: () => RpcId;
+  readonly defaultRequestTimeoutMs?: number;
 }
 
 export interface AppServerClientInitializeOptions {
@@ -416,6 +478,7 @@ export interface AppServerClientInitializeOptions {
    * initialize -> initialized handshake in one call.
    */
   readonly sendInitialized?: boolean;
+  readonly request?: AppServerClientRequestOptions;
 }
 
 const INTERNAL_RPC_ERROR_CODE = -32603;
@@ -446,49 +509,62 @@ export class AppServerClient {
     // Bind namespace helpers once so callers can safely pass them around
     // without losing the client instance that owns the underlying session.
     this.thread = {
-      start: async (params) => await this.#request("thread/start", params),
-      resume: async (params) => await this.#request("thread/resume", params),
-      read: async (params) => await this.#request("thread/read", params),
-      list: async (params = {}) => await this.#request("thread/list", params),
-      loadedList: async (params = {}) =>
-        await this.#request("thread/loaded/list", params)
+      start: async (params, options) =>
+        await this.#request("thread/start", params, options),
+      resume: async (params, options) =>
+        await this.#request("thread/resume", params, options),
+      read: async (params, options) =>
+        await this.#request("thread/read", params, options),
+      list: async (params = {}, options) =>
+        await this.#request("thread/list", params, options),
+      loadedList: async (params = {}, options) =>
+        await this.#request("thread/loaded/list", params, options)
     };
     this.turn = {
-      start: async (params) => await this.#request("turn/start", params),
-      steer: async (params) => await this.#request("turn/steer", params),
-      interrupt: async (params) => await this.#request("turn/interrupt", params)
+      start: async (params, options) =>
+        await this.#request("turn/start", params, options),
+      steer: async (params, options) =>
+        await this.#request("turn/steer", params, options),
+      interrupt: async (params, options) =>
+        await this.#request("turn/interrupt", params, options)
     };
     this.command = {
-      exec: async (params) => await this.#request("command/exec", params),
-      write: async (params) =>
-        await this.#request("command/exec/write", params),
-      resize: async (params) =>
-        await this.#request("command/exec/resize", params),
-      terminate: async (params) =>
-        await this.#request("command/exec/terminate", params)
+      exec: async (params, options) =>
+        await this.#request("command/exec", params, options),
+      write: async (params, options) =>
+        await this.#request("command/exec/write", params, options),
+      resize: async (params, options) =>
+        await this.#request("command/exec/resize", params, options),
+      terminate: async (params, options) =>
+        await this.#request("command/exec/terminate", params, options)
     };
     this.fs = {
-      readFile: async (params) => await this.#request("fs/readFile", params),
-      writeFile: async (params) => await this.#request("fs/writeFile", params),
-      createDirectory: async (params) =>
-        await this.#request("fs/createDirectory", params),
-      getMetadata: async (params) =>
-        await this.#request("fs/getMetadata", params),
-      readDirectory: async (params) =>
-        await this.#request("fs/readDirectory", params),
-      remove: async (params) => await this.#request("fs/remove", params),
-      copy: async (params) => await this.#request("fs/copy", params)
+      readFile: async (params, options) =>
+        await this.#request("fs/readFile", params, options),
+      writeFile: async (params, options) =>
+        await this.#request("fs/writeFile", params, options),
+      createDirectory: async (params, options) =>
+        await this.#request("fs/createDirectory", params, options),
+      getMetadata: async (params, options) =>
+        await this.#request("fs/getMetadata", params, options),
+      readDirectory: async (params, options) =>
+        await this.#request("fs/readDirectory", params, options),
+      remove: async (params, options) =>
+        await this.#request("fs/remove", params, options),
+      copy: async (params, options) =>
+        await this.#request("fs/copy", params, options)
     };
     this.account = {
-      read: async (params = { refreshToken: false }) =>
-        await this.#request("account/read", params),
-      loginStart: async (params) =>
-        await this.#request("account/login/start", params),
-      loginCancel: async (params) =>
-        await this.#request("account/login/cancel", params),
-      logout: async () => await this.#request("account/logout", undefined),
-      rateLimitsRead: async () =>
-        await this.#request("account/rateLimits/read", undefined)
+      read: async (params = { refreshToken: false }, options) =>
+        await this.#request("account/read", params, options),
+      loginStart: async (params, options) =>
+        await this.#request("account/login/start", params, options),
+      loginCancel: async (params, options) =>
+        await this.#request("account/login/cancel", params, options),
+      logout: async (options) =>
+        await this.#request("account/logout", undefined, options),
+      rateLimitsRead: async (options) =>
+        await this.#request("account/rateLimits/read", undefined, options)
     };
   }
 
@@ -516,7 +592,7 @@ export class AppServerClient {
     this.#ensureNotClosed("initialize");
     await this.start();
 
-    const response = await this.#initializeOnce(params);
+    const response = await this.#initializeOnce(params, options.request);
 
     if (options.sendInitialized ?? true) {
       await this.initialized();
@@ -542,21 +618,24 @@ export class AppServerClient {
   }
 
   public async appList(
-    params: AppsListParams = {}
+    params: AppsListParams = {},
+    options?: AppServerClientRequestOptions
   ): Promise<AppsListResponse> {
-    return await this.#request("app/list", params);
+    return await this.#request("app/list", params, options);
   }
 
   public async modelList(
-    params: ModelListParams = {}
+    params: ModelListParams = {},
+    options?: AppServerClientRequestOptions
   ): Promise<ModelListResponse> {
-    return await this.#request("model/list", params);
+    return await this.#request("model/list", params, options);
   }
 
   public async skillsList(
-    params: SkillsListParams = {}
+    params: SkillsListParams = {},
+    options?: AppServerClientRequestOptions
   ): Promise<SkillsListResponse> {
-    return await this.#request("skills/list", params);
+    return await this.#request("skills/list", params, options);
   }
 
   public onNotification(
@@ -676,7 +755,10 @@ export class AppServerClient {
     return this.#session.onClose(listener);
   }
 
-  async #initializeOnce(params: InitializeParams): Promise<InitializeResponse> {
+  async #initializeOnce(
+    params: InitializeParams,
+    requestOptions?: AppServerClientRequestOptions
+  ): Promise<InitializeResponse> {
     this.#assertMatchingInitializeParams(params);
 
     if (this.#initializeResponse) {
@@ -686,7 +768,7 @@ export class AppServerClient {
     if (!this.#initializePromise) {
       this.#initializeParams = params;
       this.#initializePromise = this.#session
-        .request("initialize", params as JsonValue)
+        .request("initialize", params as JsonValue, requestOptions)
         .then((response) => {
           const typedResponse = response as InitializeResponse;
           this.#initializeResponse = typedResponse;
@@ -714,11 +796,13 @@ export class AppServerClient {
 
   async #request<Method extends keyof StableClientRequestMap>(
     method: Method,
-    params: StableClientRequestMap[Method]["params"]
+    params: StableClientRequestMap[Method]["params"],
+    options?: AppServerClientRequestOptions
   ): Promise<StableClientRequestMap[Method]["response"]> {
     return (await this.#session.request(
       method,
-      params as JsonValue
+      params as JsonValue,
+      options
     )) as StableClientRequestMap[Method]["response"];
   }
 
