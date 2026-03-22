@@ -11,22 +11,18 @@ The package provides a typed, layered client surface:
 
 ## Documentation
 
-The detailed documentation lives in the docs site rather than this README.
-
 - Published docs: [brandonmjohnson.github.io/codex-client](https://brandonmjohnson.github.io/codex-client/)
-- Guide entrypoint: [Guide](https://brandonmjohnson.github.io/codex-client/guide/)
+- Guide: [Guide](https://brandonmjohnson.github.io/codex-client/guide/)
 - API overview: [API Surface](https://brandonmjohnson.github.io/codex-client/reference/)
-- Detailed `AppServerClient` reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
+- Client reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
 
-Useful docs commands:
+Docs commands:
 
 ```bash
 npm run docs:dev
 npm run docs:build
 npm run docs:preview
 ```
-
-The `Docs` GitHub Actions workflow publishes the site to GitHub Pages from `main`.
 
 ## Status
 
