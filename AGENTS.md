@@ -141,6 +141,7 @@ After code review is complete, every meaningful code change must go through sub-
 - If QA finds issues, fix them and run QA again until the change is ready.
 - QA should include automated validation where available.
 - QA should also include exploratory testing of the actual client whenever feasible.
+- QA should validate changed documentation against the current code so docs, examples, commands, and workflow guidance do not drift from reality after a change.
 - If the client can be run against a real or realistic app-server setup, do that.
 - If exploratory testing is blocked, document what was attempted, what was validated, and what remains unverified.
 
@@ -174,6 +175,7 @@ A task is done only when all of the following are true:
 - Review findings have been addressed through an iterative fix-and-review loop.
 - A sub-agent has completed QA.
 - QA findings have been addressed through an iterative fix-and-QA loop.
+- Changed documentation has been checked during QA for accuracy against the current code and workflows.
 - Exploratory testing has been performed when feasible, especially for real client behavior.
 - The implementation plan or related docs have been updated if needed.
 
