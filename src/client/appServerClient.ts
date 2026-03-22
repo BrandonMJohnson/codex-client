@@ -1,4 +1,10 @@
-import { RpcSession, RpcStateError, type RpcId, type RpcInboundRequest } from "../rpc/index.js";
+import {
+  RpcSession,
+  RpcStateError,
+  type RpcId,
+  type RpcInboundRequest,
+  type RpcNotificationMessage
+} from "../rpc/index.js";
 import type {
   AppInfo,
   AppsListParams,
@@ -8,8 +14,6 @@ import type {
   Model,
   ModelListParams,
   ModelListResponse,
-  ServerNotification,
-  ServerRequest,
   SkillsListEntry,
   SkillsListParams,
   SkillsListResponse
@@ -34,7 +38,6 @@ type StableClientRequestMap = {
 export type AppServerClientModel = Model;
 export type AppServerClientSkill = SkillsListEntry;
 export type AppServerClientApp = AppInfo;
-export type AppServerClientInboundRequest = RpcInboundRequest & ServerRequest;
 
 export interface AppServerClientOptions {
   readonly transport: Transport;
@@ -59,10 +62,6 @@ export class AppServerClient {
 
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
-  }
-
-  public get session(): RpcSession {
-    return this.#session;
   }
 
   public get state(): TransportState {
@@ -133,19 +132,19 @@ export class AppServerClient {
   }
 
   public onNotification(
-    listener: (notification: ServerNotification) => void
+    listener: (notification: RpcNotificationMessage) => void
   ): () => void {
-    return this.#session.onNotification((notification) => {
-      listener(notification as ServerNotification);
-    });
+    // Keep this surface at raw RPC fidelity until the client grows the
+    // method-specific validation needed for a sound typed event API.
+    return this.#session.onNotification(listener);
   }
 
   public onRequest(
-    listener: (request: AppServerClientInboundRequest) => void
+    listener: (request: RpcInboundRequest) => void
   ): () => void {
-    return this.#session.onRequest((request) => {
-      listener(request as AppServerClientInboundRequest);
-    });
+    // Server-initiated requests are exposed as raw RPC objects for now so the
+    // wrapper does not over-promise payload typing that it has not validated.
+    return this.#session.onRequest(listener);
   }
 
   public onError(listener: (error: Error) => void): () => void {

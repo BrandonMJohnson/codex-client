@@ -6,7 +6,7 @@ import {
   RpcStateError,
   type InitializeParams,
   type JsonValue,
-  type ServerNotification,
+  type RpcNotificationMessage,
   type Transport,
   type TransportCloseListener,
   type TransportErrorListener,
@@ -250,10 +250,10 @@ describe("AppServerClient", () => {
     });
   });
 
-  it("passes typed notifications and server requests through the client surface", async () => {
+  it("passes raw notifications and server requests through the client surface", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
-    const notifications: ServerNotification[] = [];
+    const notifications: RpcNotificationMessage[] = [];
     const requests: string[] = [];
 
     client.onNotification((notification) => {

@@ -40,7 +40,7 @@ The protocol details in this plan are derived from that README, including:
 - Added a handwritten `src/protocol/index.ts` boundary so runtime code can depend on curated protocol exports without reaching into generated files directly.
 - Added focused tests for the generation-script import normalization helper and validated the generation flow with `bindings:check`, `typecheck`, `build`, and the existing test suite.
 - Added a GitHub Actions workflow that installs the manifest-pinned `codex` CLI version and runs `bindings:check` on pushes to `main` and on pull requests.
-- Added a first-pass `client/` layer with an `AppServerClient` wrapper that manages the `initialize` -> `initialized` handshake, exposes typed `model/list`, `skills/list`, and `app/list` helpers, and passes through typed server notifications and requests without forcing callers down to raw RPC primitives.
+- Added a first-pass `client/` layer with an `AppServerClient` wrapper that manages the `initialize` -> `initialized` handshake, exposes typed `model/list`, `skills/list`, and `app/list` helpers, and passes through raw notifications and server requests until a validated event API lands.
 - Added focused unit coverage for client handshake caching, initialize retry behavior, deferred `initialized` calls, and typed event passthrough, then updated the real stdio integration test to exercise the client surface instead of raw `RpcSession` usage.
 
 ## Architectural Direction
