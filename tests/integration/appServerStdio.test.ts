@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientApprovalRequestMethod,
   RpcResponseError,
   StdioTransport,
   type AppServerClientNotificationOf,
@@ -677,6 +678,193 @@ describe("codex app-server stdio integration", () => {
   );
 
   itIfCodex(
+    "runs a turn helper that collects streamed events against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const streamedMethods: string[] = [];
+        const run = await client.turn.run(
+          {
+            threadId: threadStart.thread.id,
+            ...(preferredModel ? { model: preferredModel } : {}),
+            effort: "low",
+            input: [
+              {
+                type: "text",
+                text: "Reply with the exact text helper-stream-check.",
+                text_elements: []
+              }
+            ]
+          },
+          {
+            completionTimeoutMs: 45_000,
+            onEvent: (event) => {
+              streamedMethods.push(event.method);
+            }
+          }
+        );
+
+        const completedAgentMessage = run.completedItems.find(
+          (item) => item.type === "agentMessage"
+        );
+
+        expect(run.start.turn.id).toBe(run.completed.params.turn.id);
+        expect(run.completed.params.turn.status).toBe("completed");
+        expect(run.events[run.events.length - 1]?.method).toBe("turn/completed");
+        expect(streamedMethods).toEqual(run.events.map((event) => event.method));
+        expect(run.started?.params.turn.id ?? run.start.turn.id).toBe(run.start.turn.id);
+        expect(completedAgentMessage?.type).toBe("agentMessage");
+
+        if (completedAgentMessage?.type !== "agentMessage") {
+          throw new Error("Expected the helper run to complete an agentMessage item.");
+        }
+
+        const streamedText = normalizeNotificationText(
+          run.agentMessageDeltas[completedAgentMessage.id] ?? ""
+        );
+        const completedText = normalizeNotificationText(completedAgentMessage.text);
+
+        expect(completedText).toContain("helper-stream-check");
+        expect(streamedText.length).toBeGreaterThan(0);
+        expect(completedText).toContain(streamedText);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
+    "runs a thread helper that starts the thread and initial turn against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const run = await client.thread.run(
+          {
+            thread: {
+              cwd: process.cwd(),
+              ...(preferredModel ? { model: preferredModel } : {}),
+              experimentalRawEvents: false,
+              persistExtendedHistory: false
+            },
+            turn: {
+              ...(preferredModel ? { model: preferredModel } : {}),
+              effort: "low",
+              input: [
+                {
+                  type: "text",
+                  text: "Reply with the exact text thread-helper-check.",
+                  text_elements: []
+                }
+              ]
+            }
+          },
+          {
+            turn: {
+              completionTimeoutMs: 45_000
+            }
+          }
+        );
+
+        const completedAgentMessage = run.turn.completedItems.find(
+          (item) => item.type === "agentMessage"
+        );
+
+        expect(run.thread.thread.id).toBe(run.turn.completed.params.threadId);
+        expect(run.turn.start.turn.id).toBe(run.turn.completed.params.turn.id);
+        expect(run.turn.completed.params.turn.status).toBe("completed");
+        expect(run.turn.events[run.turn.events.length - 1]?.method).toBe(
+          "turn/completed"
+        );
+        expect(completedAgentMessage?.type).toBe("agentMessage");
+
+        if (completedAgentMessage?.type !== "agentMessage") {
+          throw new Error("Expected the helper run to complete an agentMessage item.");
+        }
+
+        const streamedText = normalizeNotificationText(
+          run.turn.agentMessageDeltas[completedAgentMessage.id] ?? ""
+        );
+        const completedText = normalizeNotificationText(completedAgentMessage.text);
+
+        expect(completedText).toContain("thread-helper-check");
+        expect(streamedText.length).toBeGreaterThan(0);
+        expect(completedText).toContain(streamedText);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
     "suppresses opted-out turn and delta notifications against a real app-server",
     async () => {
       const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
@@ -814,24 +1002,14 @@ describe("codex app-server stdio integration", () => {
         | ((
             value: {
               requestId: string | number;
-              method:
-                | "applyPatchApproval"
-                | "execCommandApproval"
-                | "item/commandExecution/requestApproval"
-                | "item/fileChange/requestApproval"
-                | "item/permissions/requestApproval";
+              method: AppServerClientApprovalRequestMethod;
               params: Record<string, unknown>;
             }
           ) => void)
         | undefined;
       const approvalRequest = new Promise<{
         requestId: string | number;
-        method:
-          | "applyPatchApproval"
-          | "execCommandApproval"
-          | "item/commandExecution/requestApproval"
-          | "item/fileChange/requestApproval"
-          | "item/permissions/requestApproval";
+        method: AppServerClientApprovalRequestMethod;
         params: Record<string, unknown>;
       }>((resolve) => {
         settleApprovalRequest = resolve;
@@ -867,8 +1045,8 @@ describe("codex app-server stdio integration", () => {
           resolvedNotifications.push(notification);
         });
 
-        const stopHandlers = [
-          client.handleRequest("applyPatchApproval", async (request) => {
+        const stopApprovalHandlers = client.handleApprovals({
+          applyPatchApproval: (request) => {
             settleApprovalRequest?.({
               requestId: request.id,
               method: request.method,
@@ -878,8 +1056,8 @@ describe("codex app-server stdio integration", () => {
             return {
               decision: "denied"
             };
-          }),
-          client.handleRequest("execCommandApproval", async (request) => {
+          },
+          execCommandApproval: (request) => {
             settleApprovalRequest?.({
               requestId: request.id,
               method: request.method,
@@ -889,22 +1067,8 @@ describe("codex app-server stdio integration", () => {
             return {
               decision: "denied"
             };
-          }),
-          client.handleRequest(
-            "item/commandExecution/requestApproval",
-            async (request) => {
-              settleApprovalRequest?.({
-                requestId: request.id,
-                method: request.method,
-                params: request.params as Record<string, unknown>
-              });
-              settleApprovalRequest = undefined;
-              return {
-                decision: "decline"
-              };
-            }
-          ),
-          client.handleRequest("item/fileChange/requestApproval", async (request) => {
+          },
+          "item/commandExecution/requestApproval": (request) => {
             settleApprovalRequest?.({
               requestId: request.id,
               method: request.method,
@@ -914,22 +1078,31 @@ describe("codex app-server stdio integration", () => {
             return {
               decision: "decline"
             };
-          }),
-          client.handleRequest(
-            "item/permissions/requestApproval",
-            async (request) => {
-              settleApprovalRequest?.({
-                requestId: request.id,
-                method: request.method,
-                params: request.params as Record<string, unknown>
-              });
-              settleApprovalRequest = undefined;
+          },
+          "item/fileChange/requestApproval": (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "decline"
+            };
+          },
+          "item/permissions/requestApproval": (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
             return {
               permissions: {},
               scope: "turn"
             };
-          })
-        ];
+          }
+        });
 
         const modelList = await client.modelList({ includeHidden: true });
         const preferredModel = selectPreferredIntegrationModel(modelList.data);
@@ -1018,9 +1191,7 @@ describe("codex app-server stdio integration", () => {
           })
         );
 
-        stopHandlers.forEach((stop) => {
-          stop();
-        });
+        stopApprovalHandlers();
         await client.close();
         await waitForExit(child);
       } finally {

@@ -2,19 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientApprovalRequestMethod,
+  AppServerClientThreadRunError,
   type AppServerClientInboundRequest,
-  type ApplyPatchApprovalResponse,
   type AppServerClientNotificationOf,
   type ChatgptAuthTokensRefreshResponse,
   type CancelLoginAccountResponse,
-  type CommandExecutionRequestApprovalResponse,
   type CommandExecResizeResponse,
   type CommandExecResponse,
   type CommandExecTerminateResponse,
   type CommandExecWriteResponse,
   type DynamicToolCallResponse,
-  type ExecCommandApprovalResponse,
-  type FileChangeRequestApprovalResponse,
   type FsCopyResponse,
   type FsCreateDirectoryResponse,
   type FsGetMetadataResponse,
@@ -32,7 +30,6 @@ import {
   type JsonValue,
   type LoginAccountResponse,
   type McpServerElicitationRequestResponse,
-  type PermissionsRequestApprovalResponse,
   type RpcNotificationMessage,
   type Thread,
   type ThreadReadResponse,
@@ -665,45 +662,49 @@ describe("AppServerClient", () => {
     ]);
   });
 
-  it("auto-responds from typed request handlers with exact protocol shapes", async () => {
+  it("routes approval requests through one handler with exact protocol shapes", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
+    const approvalMethods: AppServerClientApprovalRequestMethod[] = [];
 
-    client.handleRequest(
-      "applyPatchApproval",
-      (): ApplyPatchApprovalResponse => ({
-        decision: "approved"
-      })
-    );
-    client.handleRequest(
-      "execCommandApproval",
-      (): ExecCommandApprovalResponse => ({
-        decision: "approved_for_session"
-      })
-    );
-    client.handleRequest(
-      "item/commandExecution/requestApproval",
-      async (): Promise<CommandExecutionRequestApprovalResponse> => ({
-        decision: "accept"
-      })
-    );
-    client.handleRequest(
-      "item/fileChange/requestApproval",
-      (): FileChangeRequestApprovalResponse => ({
-        decision: "decline"
-      })
-    );
-    client.handleRequest(
-      "item/permissions/requestApproval",
-      (): PermissionsRequestApprovalResponse => ({
-        permissions: {
-          network: {
-            enabled: true
-          }
-        },
-        scope: "turn"
-      })
-    );
+    client.handleApprovals({
+      applyPatchApproval: (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "approved"
+        };
+      },
+      execCommandApproval: (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "approved_for_session"
+        };
+      },
+      "item/commandExecution/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "accept"
+        };
+      },
+      "item/fileChange/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        return {
+          decision: "decline"
+        };
+      },
+      "item/permissions/requestApproval": (request) => {
+        approvalMethods.push(request.method);
+        expect(request.params.reason).toBe("Need network");
+        return {
+          permissions: {
+            network: {
+              enabled: true
+            }
+          },
+          scope: "turn"
+        };
+      }
+    });
     client.handleRequest("item/tool/call", (): DynamicToolCallResponse => ({
       success: true,
       contentItems: []
@@ -858,75 +859,135 @@ describe("AppServerClient", () => {
 
     await flushAsyncWork();
 
-    expect(transport.sentMessages).toEqual([
-      {
-        id: "req-apply-patch",
-        result: {
-          decision: "approved"
-        }
-      },
-      {
-        id: "req-exec-command",
-        result: {
-          decision: "approved_for_session"
-        }
-      },
-      {
-        id: "req-approval",
-        result: {
-          decision: "accept"
-        }
-      },
-      {
-        id: "req-file",
-        result: {
-          decision: "decline"
-        }
-      },
-      {
-        id: "req-permissions",
-        result: {
-          permissions: {
-            network: {
-              enabled: true
-            }
-          },
-          scope: "turn"
-        }
-      },
-      {
-        id: "req-tool",
-        result: {
-          success: true,
-          contentItems: []
-        }
-      },
-      {
-        id: "req-elicitation",
-        result: {
-          action: "accept",
-          content: {
-            answer: "yes"
-          },
-          _meta: null
-        }
-      },
-      {
-        id: "req-user-input",
-        result: {
-          answers: {
-            question_1: {
-              answers: ["Recommended"]
+    expect(approvalMethods).toEqual([
+      "applyPatchApproval",
+      "execCommandApproval",
+      "item/commandExecution/requestApproval",
+      "item/fileChange/requestApproval",
+      "item/permissions/requestApproval"
+    ]);
+
+    expect(transport.sentMessages).toHaveLength(9);
+    expect(transport.sentMessages).toEqual(
+      expect.arrayContaining([
+        {
+          id: "req-apply-patch",
+          result: {
+            decision: "approved"
+          }
+        },
+        {
+          id: "req-exec-command",
+          result: {
+            decision: "approved_for_session"
+          }
+        },
+        {
+          id: "req-approval",
+          result: {
+            decision: "accept"
+          }
+        },
+        {
+          id: "req-file",
+          result: {
+            decision: "decline"
+          }
+        },
+        {
+          id: "req-permissions",
+          result: {
+            permissions: {
+              network: {
+                enabled: true
+              }
+            },
+            scope: "turn"
+          }
+        },
+        {
+          id: "req-tool",
+          result: {
+            success: true,
+            contentItems: []
+          }
+        },
+        {
+          id: "req-elicitation",
+          result: {
+            action: "accept",
+            content: {
+              answer: "yes"
+            },
+            _meta: null
+          }
+        },
+        {
+          id: "req-user-input",
+          result: {
+            answers: {
+              question_1: {
+                answers: ["Recommended"]
+              }
             }
           }
+        },
+        {
+          id: "req-refresh",
+          result: {
+            accessToken: "token",
+            chatgptAccountId: "acct-1",
+            chatgptPlanType: "pro"
+          }
         }
-      },
+      ])
+    );
+  });
+
+  it("responds with an internal error when an approval handler throws", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    client.handleApprovals({
+      applyPatchApproval: () => {
+        throw new Error("approval handler exploded");
+      }
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-approval-error",
+      method: "applyPatchApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "patch-1",
+        fileChanges: {},
+        reason: null,
+        grantRoot: null
+      }
+    });
+
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages).toEqual([
       {
-        id: "req-refresh",
-        result: {
-          accessToken: "token",
-          chatgptAccountId: "acct-1",
-          chatgptPlanType: "pro"
+        id: "req-approval-error",
+        error: {
+          code: -32603,
+          message: "approval handler exploded"
         }
       }
     ]);
@@ -1195,6 +1256,280 @@ describe("AppServerClient", () => {
     });
   });
 
+  it("runs a thread and its initial streamed turn through the thread namespace", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const streamedMethods: string[] = [];
+    const threadStartResponse = createThreadStartResponse(createThread("thread-1"));
+    const turnStartResponse = createTurnStartResponse(
+      createTurn("turn-1", "inProgress")
+    );
+    const turnStartedEvent: AppServerClientNotificationOf<"turn/started"> = {
+      method: "turn/started",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-1", "inProgress")
+      }
+    };
+    const itemStartedEvent: AppServerClientNotificationOf<"item/started"> = {
+      method: "item/started",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "agentMessage",
+          id: "item-1",
+          text: "Thread helper complete.",
+          phase: null,
+          memoryCitation: null
+        }
+      }
+    };
+    const firstDeltaEvent: AppServerClientNotificationOf<"item/agentMessage/delta"> =
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          delta: "Thread helper "
+        }
+      };
+    const secondDeltaEvent: AppServerClientNotificationOf<"item/agentMessage/delta"> =
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          delta: "complete."
+        }
+      };
+    const itemCompletedEvent: AppServerClientNotificationOf<"item/completed"> = {
+      method: "item/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "agentMessage",
+          id: "item-1",
+          text: "Thread helper complete.",
+          phase: null,
+          memoryCitation: null
+        }
+      }
+    };
+    const turnCompletedEvent: AppServerClientNotificationOf<"turn/completed"> = {
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: createTurn("turn-1", "completed")
+      }
+    };
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.thread.run(
+      {
+        thread: {
+          cwd: "/workspace",
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        },
+        turn: {
+          input: [
+            {
+              type: "text",
+              text: "Run the helper turn.",
+              text_elements: []
+            }
+          ],
+          effort: "low"
+        }
+      },
+      {
+        request: {
+          timeoutMs: 1_000
+        },
+        turn: {
+          onEvent: (event) => {
+            streamedMethods.push(event.method);
+          }
+        }
+      }
+    );
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
+
+    transport.emitMessage({
+      id: 2,
+      result: threadStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Run the helper turn.",
+            text_elements: []
+          }
+        ],
+        effort: "low"
+      }
+    });
+
+    transport.emitMessage({
+      id: 3,
+      result: turnStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage(turnStartedEvent as unknown as JsonValue);
+    transport.emitMessage(itemStartedEvent as unknown as JsonValue);
+    transport.emitMessage(firstDeltaEvent as unknown as JsonValue);
+    transport.emitMessage(secondDeltaEvent as unknown as JsonValue);
+    transport.emitMessage(itemCompletedEvent as unknown as JsonValue);
+    transport.emitMessage(turnCompletedEvent as unknown as JsonValue);
+
+    await expect(run).resolves.toEqual({
+      thread: threadStartResponse,
+      turn: {
+        start: turnStartResponse,
+        started: turnStartedEvent,
+        completed: turnCompletedEvent,
+        events: [
+          turnStartedEvent,
+          itemStartedEvent,
+          firstDeltaEvent,
+          secondDeltaEvent,
+          itemCompletedEvent,
+          turnCompletedEvent
+        ],
+        completedItems: [itemCompletedEvent.params.item],
+        agentMessageDeltas: {
+          "item-1": "Thread helper complete."
+        }
+      }
+    });
+    expect(streamedMethods).toEqual([
+      "turn/started",
+      "item/started",
+      "item/agentMessage/delta",
+      "item/agentMessage/delta",
+      "item/completed",
+      "turn/completed"
+    ]);
+  });
+
+  it("preserves the created thread when the initial turn fails after thread.start", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const threadStartResponse = createThreadStartResponse(createThread("thread-1"));
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.thread.run({
+      thread: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      },
+      turn: {
+        input: [
+          {
+            type: "text",
+            text: "Run the failing helper turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage({
+      id: 2,
+      result: threadStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Run the failing helper turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+
+    transport.emitMessage({
+      id: 3,
+      error: {
+        code: -32000,
+        message: "turn failed"
+      }
+    });
+
+    const error = await run.catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(AppServerClientThreadRunError);
+    if (!(error instanceof AppServerClientThreadRunError)) {
+      throw error;
+    }
+
+    expect(error.thread).toEqual(threadStartResponse);
+    expect(error.message).toContain("thread-1");
+    expect(error.cause).toBeInstanceOf(RpcResponseError);
+
+    if (error.cause instanceof RpcResponseError) {
+      expect(error.cause.message).toBe("turn failed");
+      expect(error.cause.code).toBe(-32000);
+    }
+  });
+
   it("routes turn namespace helpers to the stable turn RPC methods", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });
@@ -1296,6 +1631,191 @@ describe("AppServerClient", () => {
       result: createTurnInterruptResponse() as JsonValue
     });
     await expect(turnInterrupt).resolves.toEqual(createTurnInterruptResponse());
+  });
+
+  it("runs a turn and collects streamed lifecycle events for the matching turn id", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const seenMethods: string[] = [];
+    const fixtureStarted = documentedTurnStreamingFixture.notifications[0];
+    const fixtureCompleted = documentedTurnStreamingFixture.notifications.at(-1);
+    const completedReviewItem = documentedTurnStreamingFixture.notifications[2];
+    const completedAgentItem = documentedTurnStreamingFixture.notifications[6];
+    const completedReviewExitItem = documentedTurnStreamingFixture.notifications[8];
+
+    if (fixtureStarted?.method !== "turn/started") {
+      throw new Error("Expected the streaming fixture to start with turn/started.");
+    }
+
+    if (fixtureCompleted?.method !== "turn/completed") {
+      throw new Error("Expected the streaming fixture to end with turn/completed.");
+    }
+
+    if (
+      completedReviewItem?.method !== "item/completed" ||
+      completedAgentItem?.method !== "item/completed" ||
+      completedReviewExitItem?.method !== "item/completed"
+    ) {
+      throw new Error("Expected fixture item completions at the documented indexes.");
+    }
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.turn.run(
+      {
+        threadId: documentedTurnStreamingFixture.threadId,
+        input: [
+          {
+            type: "text",
+            text: "Run the fixture turn.",
+            text_elements: []
+          }
+        ]
+      },
+      {
+        onEvent: (event) => {
+          seenMethods.push(event.method);
+        }
+      }
+    );
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "turn/start",
+      params: {
+        threadId: documentedTurnStreamingFixture.threadId,
+        input: [
+          {
+            type: "text",
+            text: "Run the fixture turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+
+    for (const notification of documentedTurnStreamingFixture.notifications.slice(0, 4)) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ) as JsonValue
+    });
+
+    for (const notification of documentedTurnStreamingFixture.notifications.slice(4)) {
+      transport.emitMessage(notification as unknown as JsonValue);
+    }
+
+    await expect(run).resolves.toEqual({
+      start: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ),
+      started: fixtureStarted,
+      completed: fixtureCompleted,
+      events: documentedTurnStreamingFixture.notifications,
+      completedItems: [
+        completedReviewItem.params.item,
+        completedAgentItem.params.item,
+        completedReviewExitItem.params.item
+      ],
+      agentMessageDeltas: {
+        [documentedTurnStreamingFixture.agentMessageItemId]:
+          documentedTurnStreamingFixture.expectedAgentMessageText
+      }
+    });
+    expect(seenMethods).toEqual(
+      documentedTurnStreamingFixture.notifications.map(
+        (notification) => notification.method
+      )
+    );
+  });
+
+  it("runs a turn when callers opt out of turn-started and delta notifications", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const completedReviewItem = documentedTurnStreamingFixture.notifications[2];
+    const completedAgentItem = documentedTurnStreamingFixture.notifications[6];
+
+    if (
+      completedReviewItem?.method !== "item/completed" ||
+      completedAgentItem?.method !== "item/completed"
+    ) {
+      throw new Error("Expected fixture item completions at the documented indexes.");
+    }
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.turn.run({
+      threadId: documentedTurnStreamingFixture.threadId,
+      input: [
+        {
+          type: "text",
+          text: "Run the opt-out fixture turn.",
+          text_elements: []
+        }
+      ]
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(
+        createTurn(documentedTurnStreamingFixture.turnId, "inProgress")
+      ) as JsonValue
+    });
+
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[1] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[2] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[3] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[6] as unknown as JsonValue
+    );
+    transport.emitMessage(
+      documentedTurnStreamingFixture.notifications[
+        documentedTurnStreamingFixture.notifications.length - 1
+      ] as unknown as JsonValue
+    );
+
+    await expect(run).resolves.toMatchObject({
+      started: null,
+      completedItems: [
+        completedReviewItem.params.item,
+        completedAgentItem.params.item
+      ],
+      agentMessageDeltas: {}
+    });
   });
 
   it("routes command namespace helpers to the stable command RPC methods", async () => {

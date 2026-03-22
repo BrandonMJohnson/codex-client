@@ -7,6 +7,24 @@ import {
   type RpcInboundRequest,
   type RpcNotificationMessage
 } from "../rpc/index.js";
+import {
+  runTurnWithStream,
+  type AppServerClientTurnRunOptions,
+  type AppServerClientTurnRunResult
+} from "./turnRun.js";
+import {
+  runThreadWithInitialTurn,
+  type AppServerClientThreadRunParams,
+  type AppServerClientThreadRunOptions,
+  type AppServerClientThreadRunResult
+} from "./threadRun.js";
+import {
+  APPROVAL_REQUEST_METHODS,
+  type AppServerClientApprovalHandlers,
+  type AppServerClientApprovalRequestMethod,
+  type AppServerClientApprovalRequestOf,
+  type AppServerClientApprovalResponseOf
+} from "./approvalHandling.js";
 import type {
   Account,
   AppInfo,
@@ -317,6 +335,20 @@ export interface AppServerClientAccountApi {
 }
 
 export interface AppServerClientThreadApi {
+  /**
+   * Start a thread and immediately run the first streamed turn on it.
+   *
+   * This is a thin composition helper: the thread start response provides the
+   * thread id that is then threaded into `turn.run()` so callers do not have to
+   * manually stitch the two calls together. If the initial turn fails after the
+   * thread has already been created, the helper rejects with
+   * `AppServerClientThreadRunError` so callers can still recover the created
+   * thread id and decide how to continue.
+   */
+  run(
+    params: AppServerClientThreadRunParams,
+    options?: AppServerClientThreadRunOptions
+  ): Promise<AppServerClientThreadRunResult>;
   start(
     params: ThreadStartParams,
     options?: AppServerClientRequestOptions
@@ -373,6 +405,18 @@ export interface AppServerClientTurnApi {
     params: TurnInterruptParams,
     options?: AppServerClientRequestOptions
   ): Promise<TurnInterruptResponse>;
+  /**
+   * Start a turn and collect its lifecycle notifications until the matching
+   * `turn/completed` event arrives.
+   *
+   * The helper tolerates callers opting out of intermediate event classes such
+   * as `turn/started` or `item/agentMessage/delta`, but it still depends on
+   * `turn/completed` to know when the turn has finished.
+   */
+  run(
+    params: TurnStartParams,
+    options?: AppServerClientTurnRunOptions
+  ): Promise<AppServerClientTurnRunResult>;
 }
 
 export interface AppServerClientCommandApi {
@@ -518,7 +562,9 @@ export class AppServerClient {
       list: async (params = {}, options) =>
         await this.#request("thread/list", params, options),
       loadedList: async (params = {}, options) =>
-        await this.#request("thread/loaded/list", params, options)
+        await this.#request("thread/loaded/list", params, options),
+      run: async (params, options) =>
+        await runThreadWithInitialTurn(this, params, options)
     };
     this.turn = {
       start: async (params, options) =>
@@ -526,7 +572,9 @@ export class AppServerClient {
       steer: async (params, options) =>
         await this.#request("turn/steer", params, options),
       interrupt: async (params, options) =>
-        await this.#request("turn/interrupt", params, options)
+        await this.#request("turn/interrupt", params, options),
+      run: async (params, options) =>
+        await runTurnWithStream(this, params, options)
     };
     this.command = {
       exec: async (params, options) =>
@@ -759,6 +807,139 @@ export class AppServerClient {
     };
   }
 
+  /**
+   * Register typed approval handlers for the approval-style server request
+   * methods that app-server emits during risky operations.
+   *
+   * Provide the method handlers you want to auto-handle. Each handler returns
+   * the exact protocol response for that method, while the lower-level
+   * `onServerRequest()` and `handleRequest()` APIs remain available for callers
+   * that need more control.
+   */
+  public handleApprovals(
+    handlers: AppServerClientApprovalHandlers
+  ): () => void {
+    const activeMethods = APPROVAL_REQUEST_METHODS.filter(
+      (method) => handlers[method] !== undefined
+    );
+
+    if (activeMethods.length === 0) {
+      return () => {};
+    }
+
+    for (const method of activeMethods) {
+      if (this.#autoHandledRequestMethods.has(method)) {
+        throw new RpcStateError(
+          `Cannot register more than one auto-handler for server request "${method}".`
+        );
+      }
+    }
+
+    for (const method of activeMethods) {
+      this.#autoHandledRequestMethods.add(method);
+    }
+
+    const dispatchApprovalRequest = <
+      Method extends AppServerClientApprovalRequestMethod
+    >(
+      method: Method,
+      request: RpcInboundRequest,
+      handler: NonNullable<AppServerClientApprovalHandlers[Method]>
+    ): void => {
+      const approvalRequest = this.#createApprovalRequestWrapper(method, request);
+      let resultPromise: Promise<
+        AppServerClientApprovalResponseOf<Method> | undefined
+      >;
+
+      try {
+        resultPromise = Promise.resolve(handler(approvalRequest));
+      } catch (error) {
+        resultPromise = Promise.reject(error);
+      }
+
+      void resultPromise
+        .then(async (result) => {
+          if (result === undefined) {
+            await request.respondError({
+              code: INTERNAL_RPC_ERROR_CODE,
+              message: "Approval handler must return a response."
+            });
+            return;
+          }
+
+          await request.respond(result as JsonValue);
+        })
+        .catch(async (error: unknown) => {
+          await request.respondError({
+            code: INTERNAL_RPC_ERROR_CODE,
+            message: asError(error).message
+          });
+        });
+    };
+
+    const unsubscribe = this.#session.onRequest((request) => {
+      if (!isApprovalRequestMethod(request.method)) {
+        return;
+      }
+
+      switch (request.method) {
+        case "applyPatchApproval":
+          if (handlers.applyPatchApproval) {
+            dispatchApprovalRequest(
+              "applyPatchApproval",
+              request,
+              handlers.applyPatchApproval
+            );
+          }
+          return;
+        case "execCommandApproval":
+          if (handlers.execCommandApproval) {
+            dispatchApprovalRequest(
+              "execCommandApproval",
+              request,
+              handlers.execCommandApproval
+            );
+          }
+          return;
+        case "item/commandExecution/requestApproval":
+          if (handlers["item/commandExecution/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/commandExecution/requestApproval",
+              request,
+              handlers["item/commandExecution/requestApproval"]
+            );
+          }
+          return;
+        case "item/fileChange/requestApproval":
+          if (handlers["item/fileChange/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/fileChange/requestApproval",
+              request,
+              handlers["item/fileChange/requestApproval"]
+            );
+          }
+          return;
+        case "item/permissions/requestApproval":
+          if (handlers["item/permissions/requestApproval"]) {
+            dispatchApprovalRequest(
+              "item/permissions/requestApproval",
+              request,
+              handlers["item/permissions/requestApproval"]
+            );
+          }
+          return;
+      }
+    });
+
+    return () => {
+      for (const method of activeMethods) {
+        this.#autoHandledRequestMethods.delete(method);
+      }
+
+      unsubscribe();
+    };
+  }
+
   public onError(listener: (error: Error) => void): () => void {
     return this.#session.onError(listener);
   }
@@ -874,6 +1055,23 @@ export class AppServerClient {
       wasResponded: () => responded
     };
   }
+
+  #createApprovalRequestWrapper<Method extends AppServerClientApprovalRequestMethod>(
+    method: Method,
+    request: RpcInboundRequest
+  ): AppServerClientApprovalRequestOf<Method> {
+    return {
+      id: request.id,
+      method,
+      params: request.params as AppServerClientApprovalRequestOf<Method>["params"]
+    };
+  }
+}
+
+function isApprovalRequestMethod(
+  method: string
+): method is AppServerClientApprovalRequestMethod {
+  return (APPROVAL_REQUEST_METHODS as readonly string[]).includes(method);
 }
 
 function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {
