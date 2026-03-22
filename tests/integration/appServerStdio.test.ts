@@ -7,11 +7,21 @@ import {
   AppServerClient,
   RpcResponseError,
   StdioTransport,
+  type RpcNotificationMessage,
   type ThreadResumeResponse
 } from "../../src/index.js";
 
 const codexVersion = getCodexVersion();
 const itIfCodex = codexVersion === null ? it.skip : it;
+
+type CommandExecOutputDeltaNotification = {
+  method: "command/exec/outputDelta";
+  params: {
+    processId: string;
+    stream: "stdout" | "stderr";
+    deltaBase64: string;
+  };
+};
 
 describe("codex app-server stdio integration", () => {
   itIfCodex(
@@ -358,7 +368,11 @@ describe("codex app-server stdio integration", () => {
         });
 
         const commandResult = await client.command.exec({
-          command: ["/bin/echo", "command-client-api"],
+          command: [
+            process.execPath,
+            "-e",
+            'process.stdout.write("command-client-api\\n")'
+          ],
           cwd: process.cwd()
         });
 
@@ -367,6 +381,179 @@ describe("codex app-server stdio integration", () => {
           stdout: "command-client-api\n",
           stderr: ""
         });
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "streams stdin and resizes a PTY-backed standalone command against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+      const notifications: RpcNotificationMessage[] = [];
+      const processId = "interactive-command-test";
+      const streamedText = "hello from stdin";
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        client.onNotification((notification) => {
+          notifications.push(notification);
+        });
+
+        const execPromise = client.command.exec({
+          command: [
+            process.execPath,
+            "-e",
+            [
+              'process.stdin.setEncoding("utf8");',
+              'process.stdout.write("ready\\n");',
+              "process.stdin.on('data', (chunk) => process.stdout.write(chunk));",
+              "process.stdin.on('end', () => process.exit(0));"
+            ].join("")
+          ],
+          processId,
+          tty: true,
+          streamStdin: true,
+          streamStdoutStderr: true,
+          size: {
+            rows: 24,
+            cols: 80
+          }
+        });
+
+        await waitForCommandOutput(notifications, processId, "ready");
+
+        await expect(
+          client.command.resize({
+            processId,
+            size: {
+              rows: 40,
+              cols: 120
+            }
+          })
+        ).resolves.toEqual({});
+
+        await expect(
+          client.command.write({
+            processId,
+            deltaBase64: Buffer.from(`${streamedText}\n`, "utf8").toString(
+              "base64"
+            ),
+            closeStdin: true
+          })
+        ).resolves.toEqual({});
+
+        const commandResult = await execPromise;
+        expect(commandResult).toEqual({
+          exitCode: 0,
+          stdout: "",
+          stderr: ""
+        });
+
+        const stdoutText = collectCommandOutput(notifications, processId, "stdout");
+        expect(stdoutText).toContain("ready");
+        expect(stdoutText).toContain(streamedText);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "terminates a streaming standalone command against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+      const notifications: RpcNotificationMessage[] = [];
+      const processId = "terminate-command-test";
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        client.onNotification((notification) => {
+          notifications.push(notification);
+        });
+
+        const execPromise = client.command.exec({
+          command: [
+            process.execPath,
+            "-e",
+            [
+              'process.stdout.write("started\\n");',
+              "setInterval(() => undefined, 1_000);"
+            ].join("")
+          ],
+          processId,
+          streamStdoutStderr: true
+        });
+
+        await waitForCommandOutput(notifications, processId, "started");
+
+        await expect(
+          client.command.terminate({
+            processId
+          })
+        ).resolves.toEqual({});
+
+        const commandResult = await execPromise;
+        expect(commandResult).toEqual(
+          expect.objectContaining({
+            exitCode: expect.any(Number),
+            stdout: "",
+            stderr: ""
+          })
+        );
 
         await client.close();
         await waitForExit(child);
@@ -525,4 +712,55 @@ function selectPreferredIntegrationModel(
   }
 
   return undefined;
+}
+
+function collectCommandOutput(
+  notifications: RpcNotificationMessage[],
+  processId: string,
+  stream: "stdout" | "stderr"
+): string {
+  return notifications
+    .flatMap((notification) => {
+      if (!isCommandExecOutputDeltaNotification(notification)) {
+        return [];
+      }
+
+      if (
+        notification.params.processId !== processId ||
+        notification.params.stream !== stream
+      ) {
+        return [];
+      }
+
+      return [Buffer.from(notification.params.deltaBase64, "base64").toString("utf8")];
+    })
+    .join("");
+}
+
+function isCommandExecOutputDeltaNotification(
+  notification: RpcNotificationMessage
+): notification is CommandExecOutputDeltaNotification {
+  return notification.method === "command/exec/outputDelta";
+}
+
+async function waitForCommandOutput(
+  notifications: RpcNotificationMessage[],
+  processId: string,
+  expectedText: string
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+
+  while (Date.now() < deadline) {
+    if (collectCommandOutput(notifications, processId, "stdout").includes(expectedText)) {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  throw new Error(
+    `Timed out waiting for command output containing ${JSON.stringify(expectedText)} for process ${processId}.`
+  );
 }
