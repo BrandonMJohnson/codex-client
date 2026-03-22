@@ -1,10 +1,10 @@
 # AppServerClient
 
-`AppServerClient` is the main ergonomic API exposed by the package. It wraps the `initialize` lifecycle, exposes typed request helpers, and keeps lower-level notification and server-request hooks available.
+`AppServerClient` is the main client API exposed by the package. It manages the app-server connection lifecycle, exposes typed request helpers, and provides event and server-request hooks for interactive flows.
 
 ## Construct A Client
 
-Most callers create a client from `StdioTransport`:
+Most applications create a client from `StdioTransport`:
 
 ```ts
 import { spawn } from "node:child_process";
@@ -178,7 +178,7 @@ console.log(skills.skills.map((skill) => skill.name));
 
 ## `client.thread`
 
-Thread helpers group the thread-oriented request surface and one higher-level composition helper.
+Thread helpers cover thread creation, inspection, resumption, and the combined thread-plus-first-turn flow.
 
 ### `client.thread.start(params, options?)`
 
@@ -273,7 +273,7 @@ Important behavior:
 
 ## `client.turn`
 
-Turn helpers cover both raw turn requests and the higher-level streamed run helper.
+Turn helpers cover direct turn requests and the streamed helper that waits for completion.
 
 ### `client.turn.start(params, options?)`
 
@@ -391,7 +391,7 @@ const run = await client.turn.run(
 
 ## `client.command`
 
-Standalone command helpers operate outside a thread turn.
+Standalone command helpers execute processes outside thread turn execution.
 
 ### `client.command.exec(params, options?)`
 
@@ -454,7 +454,7 @@ await client.command.terminate({
 
 ## `client.fs`
 
-Filesystem helpers operate on the host filesystem exposed by app-server.
+Filesystem helpers operate on the host filesystem exposed through app-server.
 
 ### `client.fs.readFile(params, options?)`
 
@@ -539,7 +539,7 @@ await client.fs.copy({
 
 ## `client.account`
 
-Account helpers cover the active auth session and login flows.
+Account helpers cover the active auth session, login flows, and rate-limit snapshots.
 
 ### `client.account.read(params?, options?)`
 
@@ -725,7 +725,7 @@ const stop = client.onClose((error) => {
 
 ## Related Exported Helper Types
 
-The package also exports several client-side helper types and results alongside `AppServerClient`, including:
+The package also exports client-side helper types and result shapes alongside `AppServerClient`, including:
 
 - `AppServerClientRequestOptions`
 - `AppServerClientInitializeOptions`
@@ -737,4 +737,4 @@ The package also exports several client-side helper types and results alongside 
 - `AppServerClientThreadRunError`
 - `AppServerClientApprovalHandlers`
 
-Those are useful when you want your application code to type helper wrappers or intermediate orchestration layers around the client itself.
+These are useful when you are building your own wrappers, orchestration helpers, or strongly typed application code around the client.

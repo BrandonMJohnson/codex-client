@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: codex-app-server-client
-  text: A typed TypeScript guide for codex app-server
-  tagline: Build against the app-server protocol with a layered client, typed events, and approval helpers.
+  text: A typed TypeScript client for codex app-server
+  tagline: Start threads, run turns, stream events, and handle approvals with a layered API built for the app-server protocol.
   actions:
     - theme: brand
       text: Read the Guide
@@ -25,6 +25,6 @@ features:
     details: Handle app-server approval and request callbacks with typed request handlers instead of stringly-typed JSON plumbing.
 ---
 
-`codex-app-server-client` is a focused library, so the docs site stays focused too: one practical guide, one concise API-surface reference, and links back to the source of truth for the protocol.
+`codex-app-server-client` gives TypeScript applications a structured way to talk to `codex app-server` without hand-rolling transport, RPC lifecycle, streamed turn handling, or approval callbacks.
 
-The guide is modeled after framework-style documentation rather than a README wall of text. Start with the guide if you want to connect to a live `codex app-server`, run turns, stream events, and respond to approvals end to end.
+Start with the guide for an end-to-end setup, then use the reference pages when you need method-level details for the exported client surface.
