@@ -73,6 +73,12 @@ export type AppServerClientThread = Thread;
 
 export interface AppServerClientThreadApi {
   start(params: ThreadStartParams): Promise<ThreadStartResponse>;
+  /**
+   * Resume reloads an existing thread from persisted rollout history. The
+   * server may reject ids for freshly started threads that have not produced a
+   * resumable rollout yet, so callers should treat thread ids as resumable only
+   * after the backing session has been materialized by the server.
+   */
   resume(params: ThreadResumeParams): Promise<ThreadResumeResponse>;
   read(params: ThreadReadParams): Promise<ThreadReadResponse>;
   list(params?: ThreadListParams): Promise<ThreadListResponse>;
