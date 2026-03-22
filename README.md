@@ -49,9 +49,11 @@ For local development from a checkout:
 npm ci
 ```
 
-For consumption from another project before the first npm release, install from a local path or git URL. The package runs `prepare` during install so the built `dist/` entrypoint is generated automatically for those flows.
+For consumption from another project before the first npm release, install from a git URL, or from a local path that has already been bootstrapped with `npm ci`. The package runs `prepare` during install so the built `dist/` entrypoint is generated automatically once the source checkout has the build toolchain available.
 
 ```bash
+cd /path/to/codex-client
+npm ci
 npm install /path/to/codex-client
 ```
 
