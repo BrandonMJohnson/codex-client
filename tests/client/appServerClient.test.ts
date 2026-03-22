@@ -799,6 +799,32 @@ describe("AppServerClient", () => {
     ]);
   });
 
+  it("rejects registering more than one auto-handler for the same request method", () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const unsubscribe = client.handleRequest("item/tool/call", () => ({
+      success: true,
+      contentItems: []
+    }));
+
+    expect(() =>
+      client.handleRequest("item/tool/call", () => ({
+        success: false,
+        contentItems: []
+      }))
+    ).toThrow(RpcStateError);
+
+    unsubscribe();
+
+    expect(() =>
+      client.handleRequest("item/tool/call", () => ({
+        success: true,
+        contentItems: []
+      }))
+    ).not.toThrow();
+  });
+
   it("responds with a JSON-RPC internal error when an auto-handler throws", async () => {
     const transport = new FakeTransport();
     const client = new AppServerClient({ transport });

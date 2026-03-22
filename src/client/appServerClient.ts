@@ -426,6 +426,8 @@ type TypedRequestWrapper<Method extends AppServerClientRequestMethod> = {
 };
 
 export class AppServerClient {
+  readonly #autoHandledRequestMethods =
+    new Set<AppServerClientRequestMethod>();
   readonly #session: RpcSession;
 
   #initializeParams: InitializeParams | undefined;
@@ -610,12 +612,23 @@ export class AppServerClient {
   /**
    * Register a convenience handler that automatically responds to matching
    * server requests with the generated response type for that method.
+   *
+   * Only one auto-handler may be active per method at a time so the client
+   * cannot emit multiple JSON-RPC replies for the same inbound request.
    */
   public handleRequest<Method extends AppServerClientRequestMethod>(
     method: Method,
     handler: AppServerClientRequestHandler<Method>
   ): () => void {
-    return this.#session.onRequest((request) => {
+    if (this.#autoHandledRequestMethods.has(method)) {
+      throw new RpcStateError(
+        `Cannot register more than one auto-handler for server request "${method}".`
+      );
+    }
+
+    this.#autoHandledRequestMethods.add(method);
+
+    const unsubscribe = this.#session.onRequest((request) => {
       if (request.method !== method) {
         return;
       }
@@ -648,6 +661,11 @@ export class AppServerClient {
           });
         });
     });
+
+    return () => {
+      this.#autoHandledRequestMethods.delete(method);
+      unsubscribe();
+    };
   }
 
   public onError(listener: (error: Error) => void): () => void {
