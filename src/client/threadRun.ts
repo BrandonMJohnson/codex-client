@@ -44,6 +44,20 @@ export interface AppServerClientThreadRunResult {
   readonly turn: AppServerClientTurnRunResult;
 }
 
+export class AppServerClientThreadRunError extends Error {
+  override readonly cause: unknown;
+  readonly thread: ThreadStartResponse;
+
+  public constructor(thread: ThreadStartResponse, cause: unknown) {
+    super(
+      `thread.run() created thread ${thread.thread.id} but the initial turn failed.`
+    );
+    this.name = "AppServerClientThreadRunError";
+    this.thread = thread;
+    this.cause = cause;
+  }
+}
+
 export interface ThreadRunEventSource {
   readonly thread: {
     start(
@@ -65,13 +79,19 @@ export async function runThreadWithInitialTurn(
   options: AppServerClientThreadRunOptions = {}
 ): Promise<AppServerClientThreadRunResult> {
   const thread = await source.thread.start(params.thread, options.request);
-  const turn = await source.turn.run(
-    {
-      ...params.turn,
-      threadId: thread.thread.id
-    },
-    options.turn
-  );
+
+  let turn: AppServerClientTurnRunResult;
+  try {
+    turn = await source.turn.run(
+      {
+        ...params.turn,
+        threadId: thread.thread.id
+      },
+      options.turn
+    );
+  } catch (error) {
+    throw new AppServerClientThreadRunError(thread, error);
+  }
 
   return {
     thread,

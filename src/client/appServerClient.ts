@@ -333,7 +333,10 @@ export interface AppServerClientThreadApi {
    *
    * This is a thin composition helper: the thread start response provides the
    * thread id that is then threaded into `turn.run()` so callers do not have to
-   * manually stitch the two calls together.
+   * manually stitch the two calls together. If the initial turn fails after the
+   * thread has already been created, the helper rejects with
+   * `AppServerClientThreadRunError` so callers can still recover the created
+   * thread id and decide how to continue.
    */
   run(
     params: AppServerClientThreadRunParams,

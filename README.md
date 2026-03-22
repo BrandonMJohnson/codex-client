@@ -73,7 +73,10 @@ const turnId = run.turn.start.turn.id;
 
 The helper returns both the immediate `thread/start` response and the streamed
 turn result so callers can treat the initial conversation setup as one
-operation while still retaining the lower-level responses.
+operation while still retaining the lower-level responses. If the initial turn
+fails after the thread has already been created, the helper rejects with
+`AppServerClientThreadRunError`, which carries the successful `thread/start`
+result so callers can recover the created thread id.
 
 ## Local Development
 

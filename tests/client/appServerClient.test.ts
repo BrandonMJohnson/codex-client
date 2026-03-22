@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   AppServerClient,
+  AppServerClientThreadRunError,
   type AppServerClientInboundRequest,
   type ApplyPatchApprovalResponse,
   type AppServerClientNotificationOf,
@@ -1384,6 +1385,89 @@ describe("AppServerClient", () => {
       "item/completed",
       "turn/completed"
     ]);
+  });
+
+  it("preserves the created thread when the initial turn fails after thread.start", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const threadStartResponse = createThreadStartResponse(createThread("thread-1"));
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const run = client.thread.run({
+      thread: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      },
+      turn: {
+        input: [
+          {
+            type: "text",
+            text: "Run the failing helper turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    await flushAsyncWork();
+
+    transport.emitMessage({
+      id: 2,
+      result: threadStartResponse as JsonValue
+    });
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Run the failing helper turn.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+
+    transport.emitMessage({
+      id: 3,
+      error: {
+        code: -32000,
+        message: "turn failed"
+      }
+    });
+
+    const error = await run.catch((caughtError: unknown) => caughtError);
+
+    expect(error).toBeInstanceOf(AppServerClientThreadRunError);
+    if (!(error instanceof AppServerClientThreadRunError)) {
+      throw error;
+    }
+
+    expect(error.thread).toEqual(threadStartResponse);
+    expect(error.message).toContain("thread-1");
+    expect(error.cause).toBeInstanceOf(RpcResponseError);
+
+    if (error.cause instanceof RpcResponseError) {
+      expect(error.cause.message).toBe("turn failed");
+      expect(error.cause.code).toBe(-32000);
+    }
   });
 
   it("routes turn namespace helpers to the stable turn RPC methods", async () => {
