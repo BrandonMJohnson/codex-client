@@ -13,10 +13,10 @@ The package provides a typed, layered client surface:
 
 The detailed documentation lives in the docs site rather than this README.
 
-- Guide entrypoint: [docs/index.md](./docs/index.md)
-- Long-form guide: [docs/guide/index.md](./docs/guide/index.md)
-- API overview: [docs/reference/index.md](./docs/reference/index.md)
-- Detailed `AppServerClient` reference: [docs/reference/app-server-client.md](./docs/reference/app-server-client.md)
+- Published docs: [brandonmjohnson.github.io/codex-client](https://brandonmjohnson.github.io/codex-client/)
+- Guide entrypoint: [Guide](https://brandonmjohnson.github.io/codex-client/guide/)
+- API overview: [API Surface](https://brandonmjohnson.github.io/codex-client/reference/)
+- Detailed `AppServerClient` reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
 
 Useful docs commands:
 
