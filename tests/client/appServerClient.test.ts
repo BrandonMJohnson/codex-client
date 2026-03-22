@@ -6,6 +6,13 @@ import {
   type CommandExecResponse,
   type CommandExecTerminateResponse,
   type CommandExecWriteResponse,
+  type FsCopyResponse,
+  type FsCreateDirectoryResponse,
+  type FsGetMetadataResponse,
+  type FsReadDirectoryResponse,
+  type FsReadFileResponse,
+  type FsRemoveResponse,
+  type FsWriteFileResponse,
   RpcResponseError,
   RpcStateError,
   type InitializeParams,
@@ -662,6 +669,187 @@ describe("AppServerClient", () => {
     });
     await expect(commandTerminate).resolves.toEqual(createEmptyCommandResponse());
   });
+
+  it("routes fs namespace helpers to the stable fs RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const readFile = client.fs.readFile({
+      path: "/workspace/source.txt"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "fs/readFile",
+      params: {
+        path: "/workspace/source.txt"
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createFsReadFileResponse("aGVsbG8=") as JsonValue
+    });
+    await expect(readFile).resolves.toEqual(createFsReadFileResponse("aGVsbG8="));
+
+    const writeFile = client.fs.writeFile({
+      path: "/workspace/target.txt",
+      dataBase64: "d29ybGQ="
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "fs/writeFile",
+      params: {
+        path: "/workspace/target.txt",
+        dataBase64: "d29ybGQ="
+      }
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createEmptyFsResponse() as JsonValue
+    });
+    await expect(writeFile).resolves.toEqual(createEmptyFsResponse());
+
+    const createDirectory = client.fs.createDirectory({
+      path: "/workspace/nested",
+      recursive: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "fs/createDirectory",
+      params: {
+        path: "/workspace/nested",
+        recursive: true
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createEmptyFsResponse() as JsonValue
+    });
+    await expect(createDirectory).resolves.toEqual(createEmptyFsResponse());
+
+    const getMetadata = client.fs.getMetadata({
+      path: "/workspace/target.txt"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[3]).toEqual({
+      id: 5,
+      method: "fs/getMetadata",
+      params: {
+        path: "/workspace/target.txt"
+      }
+    });
+    transport.emitMessage({
+      id: 5,
+      result: createFsGetMetadataResponse({
+        isDirectory: false,
+        isFile: true
+      }) as JsonValue
+    });
+    await expect(getMetadata).resolves.toEqual(
+      createFsGetMetadataResponse({
+        isDirectory: false,
+        isFile: true
+      })
+    );
+
+    const readDirectory = client.fs.readDirectory({
+      path: "/workspace"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[4]).toEqual({
+      id: 6,
+      method: "fs/readDirectory",
+      params: {
+        path: "/workspace"
+      }
+    });
+    transport.emitMessage({
+      id: 6,
+      result: createFsReadDirectoryResponse([
+        {
+          fileName: "nested",
+          isDirectory: true,
+          isFile: false
+        },
+        {
+          fileName: "target.txt",
+          isDirectory: false,
+          isFile: true
+        }
+      ]) as JsonValue
+    });
+    await expect(readDirectory).resolves.toEqual(
+      createFsReadDirectoryResponse([
+        {
+          fileName: "nested",
+          isDirectory: true,
+          isFile: false
+        },
+        {
+          fileName: "target.txt",
+          isDirectory: false,
+          isFile: true
+        }
+      ])
+    );
+
+    const remove = client.fs.remove({
+      path: "/workspace/nested",
+      recursive: true,
+      force: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[5]).toEqual({
+      id: 7,
+      method: "fs/remove",
+      params: {
+        path: "/workspace/nested",
+        recursive: true,
+        force: true
+      }
+    });
+    transport.emitMessage({
+      id: 7,
+      result: createEmptyFsResponse() as JsonValue
+    });
+    await expect(remove).resolves.toEqual(createEmptyFsResponse());
+
+    const copy = client.fs.copy({
+      sourcePath: "/workspace/source.txt",
+      destinationPath: "/workspace/copied.txt",
+      recursive: false
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[6]).toEqual({
+      id: 8,
+      method: "fs/copy",
+      params: {
+        sourcePath: "/workspace/source.txt",
+        destinationPath: "/workspace/copied.txt",
+        recursive: false
+      }
+    });
+    transport.emitMessage({
+      id: 8,
+      result: createEmptyFsResponse() as JsonValue
+    });
+    await expect(copy).resolves.toEqual(createEmptyFsResponse());
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -730,6 +918,39 @@ function createEmptyCommandResponse():
   | CommandExecWriteResponse
   | CommandExecResizeResponse
   | CommandExecTerminateResponse {
+  return {};
+}
+
+function createFsReadFileResponse(dataBase64: string): FsReadFileResponse {
+  return {
+    dataBase64
+  };
+}
+
+function createFsGetMetadataResponse(
+  overrides: Partial<FsGetMetadataResponse> = {}
+): FsGetMetadataResponse {
+  return {
+    isDirectory: overrides.isDirectory ?? false,
+    isFile: overrides.isFile ?? true,
+    createdAtMs: overrides.createdAtMs ?? 1,
+    modifiedAtMs: overrides.modifiedAtMs ?? 2
+  };
+}
+
+function createFsReadDirectoryResponse(
+  entries: FsReadDirectoryResponse["entries"]
+): FsReadDirectoryResponse {
+  return {
+    entries
+  };
+}
+
+function createEmptyFsResponse():
+  | FsCopyResponse
+  | FsCreateDirectoryResponse
+  | FsRemoveResponse
+  | FsWriteFileResponse {
   return {};
 }
 
