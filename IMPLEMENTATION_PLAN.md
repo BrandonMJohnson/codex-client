@@ -42,6 +42,7 @@ The protocol details in this plan are derived from that README, including:
 - Added a GitHub Actions workflow that installs the manifest-pinned `codex` CLI version and runs `bindings:check` on pushes to `main` and on pull requests.
 - Added a first-pass `client/` layer with an `AppServerClient` wrapper that manages the `initialize` -> `initialized` handshake, exposes typed `model/list`, `skills/list`, and `app/list` helpers, and passes through raw notifications and server requests until a validated event API lands.
 - Added focused unit coverage for client handshake caching, initialize retry behavior, deferred `initialized` calls, and raw event passthrough, then updated the real stdio integration test to exercise the client surface instead of raw `RpcSession` usage.
+- Added a first-pass ergonomic `client.thread.*` namespace covering `thread/start`, `thread/resume`, `thread/read`, `thread/list`, and `thread/loaded/list`, with focused unit coverage plus a real stdio integration check for `thread/start`.
 - Published the repository to GitHub, added a baseline `CI` workflow for typecheck/build/test, enabled Dependabot for npm and GitHub Actions updates, and documented the protected-branch pull request workflow in repo guidance.
 - Tightened the repo workflow guidance so contributors always fast-forward local `main` before creating a new feature branch.
 
@@ -167,7 +168,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 ### 4. Stable Client API
 
 - [x] Implement `initialize()` and `initialized()`
-- [ ] Implement thread APIs needed for normal usage
+- [x] Implement thread APIs needed for normal usage
 - [ ] Implement turn APIs needed for normal usage
 - [ ] Implement `command/exec*` APIs
 - [ ] Implement `fs/*` APIs

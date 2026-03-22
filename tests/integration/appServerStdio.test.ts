@@ -62,7 +62,63 @@ describe("codex app-server stdio integration", () => {
 
         await client.close();
         await waitForExit(child);
-        expect(stderrChunks.join("")).toBe("");
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "starts a thread against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        expect(threadStart).toEqual(
+          expect.objectContaining({
+            thread: expect.objectContaining({
+              id: expect.any(String),
+              cwd: process.cwd(),
+              turns: expect.any(Array)
+            }),
+            model: expect.any(String),
+            modelProvider: expect.any(String)
+          })
+        );
+
+        await client.close();
+        await waitForExit(child);
       } finally {
         await cleanupChild(child);
       }

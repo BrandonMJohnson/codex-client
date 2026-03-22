@@ -296,6 +296,153 @@ describe("AppServerClient", () => {
     expect(requests).toEqual(["item/tool/call"]);
     expect(transport.sentMessages).toEqual([{ id: "req-1", result: null }]);
   });
+
+  it("routes thread namespace helpers to the stable thread RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const threadStart = client.thread.start({
+      cwd: "/workspace",
+      experimentalRawEvents: false,
+      persistExtendedHistory: false
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createThreadEnvelope("thread-1")
+    });
+    await expect(threadStart).resolves.toEqual(createThreadEnvelope("thread-1"));
+
+    const threadResume = client.thread.resume({
+      threadId: "thread-1",
+      persistExtendedHistory: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "thread/resume",
+      params: {
+        threadId: "thread-1",
+        persistExtendedHistory: true
+      }
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createThreadEnvelope("thread-1", {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            createdAt: 1,
+            updatedAt: 2,
+            lastItemId: null,
+            input: [],
+            items: []
+          }
+        ]
+      })
+    });
+    await expect(threadResume).resolves.toEqual(
+      createThreadEnvelope("thread-1", {
+        turns: [
+          {
+            id: "turn-1",
+            status: "completed",
+            createdAt: 1,
+            updatedAt: 2,
+            lastItemId: null,
+            input: [],
+            items: []
+          }
+        ]
+      })
+    );
+
+    const threadRead = client.thread.read({
+      threadId: "thread-1",
+      includeTurns: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "thread/read",
+      params: {
+        threadId: "thread-1",
+        includeTurns: true
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createThreadReadResponse("thread-1")
+    });
+    await expect(threadRead).resolves.toEqual(createThreadReadResponse("thread-1"));
+
+    const threadList = client.thread.list({
+      limit: 10,
+      searchTerm: "demo"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[3]).toEqual({
+      id: 5,
+      method: "thread/list",
+      params: {
+        limit: 10,
+        searchTerm: "demo"
+      }
+    });
+    transport.emitMessage({
+      id: 5,
+      result: {
+        data: [createThread("thread-1")],
+        nextCursor: "cursor-2"
+      }
+    });
+    await expect(threadList).resolves.toEqual({
+      data: [createThread("thread-1")],
+      nextCursor: "cursor-2"
+    });
+
+    const loadedList = client.thread.loadedList({ limit: 5 });
+    await flushAsyncWork();
+    expect(transport.sentMessages[4]).toEqual({
+      id: 6,
+      method: "thread/loaded/list",
+      params: { limit: 5 }
+    });
+    transport.emitMessage({
+      id: 6,
+      result: {
+        data: ["thread-1"],
+        nextCursor: null
+      }
+    });
+    await expect(loadedList).resolves.toEqual({
+      data: ["thread-1"],
+      nextCursor: null
+    });
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -312,4 +459,69 @@ function createInitializeParams(): InitializeParams {
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createThreadEnvelope(
+  threadId: string,
+  overrides: Record<string, JsonValue> = {}
+): JsonValue {
+  return {
+    thread: createThread(threadId, overrides),
+    model: "gpt-5",
+    modelProvider: "openai",
+    serviceTier: null,
+    cwd: "/workspace",
+    approvalPolicy: "never",
+    approvalsReviewer: "user",
+    sandbox: {
+      mode: "workspace-write",
+      networkAccess: false,
+      excludeTmpdirEnvVar: false,
+      excludeSlashesTmp: false
+    },
+    reasoningEffort: null
+  } satisfies JsonValue;
+}
+
+function createThreadReadResponse(threadId: string): JsonValue {
+  return {
+    thread: createThread(threadId, {
+      turns: [
+        {
+          id: "turn-1",
+          status: "completed",
+          createdAt: 1,
+          updatedAt: 2,
+          lastItemId: null,
+          input: [],
+          items: []
+        }
+      ]
+    })
+  } satisfies JsonValue;
+}
+
+function createThread(
+  threadId: string,
+  overrides: Record<string, JsonValue> = {}
+): JsonValue {
+  return {
+    id: threadId,
+    preview: "Demo thread",
+    ephemeral: false,
+    modelProvider: "openai",
+    createdAt: 1,
+    updatedAt: 2,
+    status: "idle",
+    path: "/tmp/thread-1.jsonl",
+    cwd: "/workspace",
+    cliVersion: "1.0.0",
+    source: "appServer",
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: "Demo thread",
+    turns: [],
+    ...overrides
+  } satisfies JsonValue;
 }
