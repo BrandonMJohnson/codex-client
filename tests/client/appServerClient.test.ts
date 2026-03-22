@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   AppServerClient,
+  type AppServerClientInboundRequest,
   type AppServerClientNotificationOf,
+  type ChatgptAuthTokensRefreshResponse,
   type CancelLoginAccountResponse,
+  type CommandExecutionRequestApprovalResponse,
   type CommandExecResizeResponse,
   type CommandExecResponse,
   type CommandExecTerminateResponse,
   type CommandExecWriteResponse,
+  type DynamicToolCallResponse,
+  type FileChangeRequestApprovalResponse,
   type FsCopyResponse,
   type FsCreateDirectoryResponse,
   type FsGetMetadataResponse,
@@ -22,11 +27,14 @@ import {
   type InitializeParams,
   type JsonValue,
   type LoginAccountResponse,
+  type McpServerElicitationRequestResponse,
+  type PermissionsRequestApprovalResponse,
   type RpcNotificationMessage,
   type Thread,
   type ThreadReadResponse,
   type ThreadResumeResponse,
   type ThreadStartResponse,
+  type ToolRequestUserInputResponse,
   type Turn,
   type TurnInterruptResponse,
   type TurnStartResponse,
@@ -394,6 +402,343 @@ describe("AppServerClient", () => {
 
     expect(turnStartedEvents).toEqual([firstTurnStartedEvent]);
     expect(tokenUsageEvents).toEqual([tokenUsageEvent]);
+  });
+
+  it("filters typed server-request subscriptions by method and preserves typed responses", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const requests: Array<AppServerClientInboundRequest<"item/tool/call">> = [];
+
+    client.onServerRequest("item/tool/call", (request) => {
+      requests.push(request);
+      void request.respond({
+        success: true,
+        contentItems: []
+      });
+    });
+    client.onServerRequest("mcpServer/elicitation/request", () => {
+      throw new Error("non-matching handler should not be called");
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-typed-1",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-1",
+        tool: "echo",
+        arguments: {
+          text: "hello"
+        }
+      }
+    });
+
+    expect(requests).toEqual([
+      {
+        id: "req-typed-1",
+        method: "item/tool/call",
+        params: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+          arguments: {
+            text: "hello"
+          }
+        },
+        respond: expect.any(Function),
+        respondError: expect.any(Function)
+      }
+    ]);
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-typed-1",
+        result: {
+          success: true,
+          contentItems: []
+        }
+      }
+    ]);
+  });
+
+  it("auto-responds from typed request handlers with exact protocol shapes", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    client.handleRequest(
+      "item/commandExecution/requestApproval",
+      async (): Promise<CommandExecutionRequestApprovalResponse> => ({
+        decision: "accept"
+      })
+    );
+    client.handleRequest(
+      "item/fileChange/requestApproval",
+      (): FileChangeRequestApprovalResponse => ({
+        decision: "decline"
+      })
+    );
+    client.handleRequest(
+      "item/permissions/requestApproval",
+      (): PermissionsRequestApprovalResponse => ({
+        permissions: {
+          network: {
+            enabled: true
+          }
+        },
+        scope: "turn"
+      })
+    );
+    client.handleRequest("item/tool/call", (): DynamicToolCallResponse => ({
+      success: true,
+      contentItems: []
+    }));
+    client.handleRequest(
+      "mcpServer/elicitation/request",
+      (): McpServerElicitationRequestResponse => ({
+        action: "accept",
+        content: {
+          answer: "yes"
+        },
+        _meta: null
+      })
+    );
+    client.handleRequest(
+      "item/tool/requestUserInput",
+      (): ToolRequestUserInputResponse => ({
+        answers: {
+          question_1: {
+            answers: ["Recommended"]
+          }
+        }
+      })
+    );
+    client.handleRequest(
+      "account/chatgptAuthTokens/refresh",
+      (): ChatgptAuthTokensRefreshResponse => ({
+        accessToken: "token",
+        chatgptAccountId: "acct-1",
+        chatgptPlanType: "pro"
+      })
+    );
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-approval",
+      method: "item/commandExecution/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1"
+      }
+    });
+    transport.emitMessage({
+      id: "req-file",
+      method: "item/fileChange/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-2"
+      }
+    });
+    transport.emitMessage({
+      id: "req-permissions",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-3",
+        reason: "Need network",
+        permissions: {
+          network: null,
+          fileSystem: null
+        }
+      }
+    });
+    transport.emitMessage({
+      id: "req-tool",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-1",
+        tool: "echo",
+        arguments: {}
+      }
+    });
+    transport.emitMessage({
+      id: "req-elicitation",
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "demo",
+        mode: "form",
+        _meta: null,
+        message: "Need input",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "string"
+            }
+          },
+          required: []
+        }
+      }
+    });
+    transport.emitMessage({
+      id: "req-user-input",
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-4",
+        questions: []
+      }
+    });
+    transport.emitMessage({
+      id: "req-refresh",
+      method: "account/chatgptAuthTokens/refresh",
+      params: {
+        reason: "unauthorized"
+      }
+    });
+
+    await flushAsyncWork();
+
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-approval",
+        result: {
+          decision: "accept"
+        }
+      },
+      {
+        id: "req-file",
+        result: {
+          decision: "decline"
+        }
+      },
+      {
+        id: "req-permissions",
+        result: {
+          permissions: {
+            network: {
+              enabled: true
+            }
+          },
+          scope: "turn"
+        }
+      },
+      {
+        id: "req-tool",
+        result: {
+          success: true,
+          contentItems: []
+        }
+      },
+      {
+        id: "req-elicitation",
+        result: {
+          action: "accept",
+          content: {
+            answer: "yes"
+          },
+          _meta: null
+        }
+      },
+      {
+        id: "req-user-input",
+        result: {
+          answers: {
+            question_1: {
+              answers: ["Recommended"]
+            }
+          }
+        }
+      },
+      {
+        id: "req-refresh",
+        result: {
+          accessToken: "token",
+          chatgptAccountId: "acct-1",
+          chatgptPlanType: "pro"
+        }
+      }
+    ]);
+  });
+
+  it("responds with a JSON-RPC internal error when an auto-handler throws", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    client.handleRequest("item/tool/call", () => {
+      throw new Error("tool handler exploded");
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-tool-error",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-2",
+        tool: "explode",
+        arguments: {}
+      }
+    });
+
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-tool-error",
+        error: {
+          code: -32603,
+          message: "tool handler exploded"
+        }
+      }
+    ]);
   });
 
   it("routes thread namespace helpers to the stable thread RPC methods", async () => {
