@@ -2,12 +2,14 @@
 
 TypeScript client library for [`codex app-server`](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md).
 
-The package provides a typed, layered client surface:
+The package exposes a single supported public entrypoint: the root package import `codex-app-server-client`. That root import provides a typed, layered client surface:
 
 - `transport/` for newline-delimited JSON over `stdio`
 - `rpc/` for request/response correlation and initialize-state enforcement
 - `protocol/` for curated generated protocol bindings
 - `client/` for ergonomic APIs like `thread.start()`, `turn.run()`, and approval handling
+
+Subpath imports are intentionally not part of the public contract.
 
 ## Documentation
 
@@ -15,6 +17,8 @@ The package provides a typed, layered client surface:
 - Guide: [Guide](https://brandonmjohnson.github.io/codex-client/guide/)
 - API overview: [API Surface](https://brandonmjohnson.github.io/codex-client/reference/)
 - Client reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Release process: [RELEASING.md](./RELEASING.md)
 
 ## Status
 
@@ -29,7 +33,7 @@ The active roadmap lives in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
 ## Install
 
-The package is ESM-only and not published to npm yet.
+The package is ESM-only, exposes only the root package entrypoint, and is not published to npm yet. Consumers should use `import` / `export` syntax; CommonJS `require()` is intentionally unsupported.
 
 For local development from this checkout:
 

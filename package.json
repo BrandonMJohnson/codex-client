@@ -26,6 +26,7 @@
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs",
     "docs:preview": "vitepress preview docs",
+    "release:check": "npm run bindings:check && npm run typecheck && npm run build && npm run package:check && npm run docs:build",
     "package:check": "node scripts/check-package.mjs",
     "prepare": "npm run build",
     "test": "vitest run",

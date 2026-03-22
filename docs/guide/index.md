@@ -21,7 +21,7 @@ This guide shows the normal client flow: connect, initialize, start a thread, ru
 
 - Node.js `24+`
 - A local `codex` CLI if you want to connect to a real app-server process
-- An ESM-friendly project, since the package publishes ESM entrypoints
+- An ESM-friendly project, since the package publishes a root-only ESM entrypoint and expects `import` / `export` syntax instead of CommonJS `require()`
 
 For live integration work, the server process is typically started with:
 
@@ -50,6 +50,8 @@ npm install /path/to/codex-client
 ```
 
 The package runs `prepare` during install, so the built `dist/` output is generated automatically once the checkout has its toolchain installed.
+
+Only the root package import is supported. Deep imports and subpath imports are intentionally not part of the public API, and CommonJS `require()` is not a supported consumption mode.
 
 ## Start The App-Server
 
