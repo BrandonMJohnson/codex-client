@@ -9,6 +9,14 @@ import type {
   AppInfo,
   AppsListParams,
   AppsListResponse,
+  CommandExecParams,
+  CommandExecResizeParams,
+  CommandExecResizeResponse,
+  CommandExecResponse,
+  CommandExecTerminateParams,
+  CommandExecTerminateResponse,
+  CommandExecWriteParams,
+  CommandExecWriteResponse,
   InitializeParams,
   InitializeResponse,
   Model,
@@ -42,6 +50,22 @@ type StableClientRequestMap = {
   readonly "app/list": {
     readonly params: AppsListParams;
     readonly response: AppsListResponse;
+  };
+  readonly "command/exec": {
+    readonly params: CommandExecParams;
+    readonly response: CommandExecResponse;
+  };
+  readonly "command/exec/write": {
+    readonly params: CommandExecWriteParams;
+    readonly response: CommandExecWriteResponse;
+  };
+  readonly "command/exec/terminate": {
+    readonly params: CommandExecTerminateParams;
+    readonly response: CommandExecTerminateResponse;
+  };
+  readonly "command/exec/resize": {
+    readonly params: CommandExecResizeParams;
+    readonly response: CommandExecResizeResponse;
   };
   readonly "model/list": {
     readonly params: ModelListParams;
@@ -128,6 +152,36 @@ export interface AppServerClientTurnApi {
   interrupt(params: TurnInterruptParams): Promise<TurnInterruptResponse>;
 }
 
+export interface AppServerClientCommandApi {
+  /**
+   * Run a standalone command outside thread/turn execution.
+   *
+   * Buffered execution can omit `processId`, but callers that need follow-up
+   * stdin writes, PTY resizing, termination, or streamed output must supply a
+   * stable connection-scoped `processId` on the initial request.
+   */
+  exec(params: CommandExecParams): Promise<CommandExecResponse>;
+  /**
+   * Write base64-encoded stdin bytes to a previously started command session,
+   * optionally closing stdin after the write.
+   */
+  write(params: CommandExecWriteParams): Promise<CommandExecWriteResponse>;
+  /**
+   * Resize the PTY for a previously started command session.
+   *
+   * This is only meaningful for commands that were started with `tty: true`.
+   */
+  resize(
+    params: CommandExecResizeParams
+  ): Promise<CommandExecResizeResponse>;
+  /**
+   * Terminate a previously started command session identified by `processId`.
+   */
+  terminate(
+    params: CommandExecTerminateParams
+  ): Promise<CommandExecTerminateResponse>;
+}
+
 export interface AppServerClientOptions {
   readonly transport: Transport;
   readonly requestIdFactory?: () => RpcId;
@@ -151,6 +205,7 @@ export class AppServerClient {
 
   public readonly thread: AppServerClientThreadApi;
   public readonly turn: AppServerClientTurnApi;
+  public readonly command: AppServerClientCommandApi;
 
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
@@ -168,6 +223,15 @@ export class AppServerClient {
       start: async (params) => await this.#request("turn/start", params),
       steer: async (params) => await this.#request("turn/steer", params),
       interrupt: async (params) => await this.#request("turn/interrupt", params)
+    };
+    this.command = {
+      exec: async (params) => await this.#request("command/exec", params),
+      write: async (params) =>
+        await this.#request("command/exec/write", params),
+      resize: async (params) =>
+        await this.#request("command/exec/resize", params),
+      terminate: async (params) =>
+        await this.#request("command/exec/terminate", params)
     };
   }
 
