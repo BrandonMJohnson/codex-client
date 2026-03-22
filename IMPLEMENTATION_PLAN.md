@@ -25,8 +25,9 @@ The protocol details in this plan are derived from that README, including:
 
 ### 2026-03-22
 
+- Confirmed the package is now published on npm and added the trusted-publishing GitHub workflow so future releases can flow through `publish.yml` instead of manual token-based publishing.
 - Confirmed the repository has effectively standardized on npm, `tsc`-driven builds, and a Node.js `24+` ESM-only runtime target, then aligned the roadmap to reflect those already-landed decisions.
-- Verified publish readiness against npm by confirming `codex-app-server-client` is currently unclaimed on the npm registry and by running a successful `npm publish --dry-run`; an actual manual publish still requires npm's write-time OTP flow or a trusted-publisher setup.
+- Verified publish readiness against npm by confirming `codex-app-server-client` is currently unclaimed on the npm registry and by running a successful `npm publish --dry-run`; a real publish now succeeds on npm and the GitHub trusted-publishing workflow is in place for future releases.
 - Clarified that the published package surface is root-only, with subpath imports intentionally unsupported, and tightened the package smoke test so it enforces that contract from the packed tarball.
 - Made the package's ESM-only support policy explicit in the docs and packaging checks, including verification that CommonJS `require()` is not a supported consumption path.
 - Added a lightweight release workflow with a seeded `CHANGELOG.md`, a `RELEASING.md` guide, a `release:check` script, and a manual CI-backed release gate so release candidates can be validated before tagging.
@@ -264,7 +265,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Decide ESM-only vs dual ESM/CJS support
 - [x] Add API docs and examples
 - [x] Add a changelog/release process
-- [ ] Publish once the stable surface is proven
+- [x] Publish once the stable surface is proven
 
 ## Recommended Delivery Phases
 
@@ -295,7 +296,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Add stronger CI validation around generated bindings
 - [x] Finalize release packaging
 - [x] Reconcile README install guidance with the final packaging/install path after release packaging work lands
-- [ ] Publish the package
+- [x] Publish the package
 
 ## Open Decisions
 

@@ -33,7 +33,7 @@ The active roadmap lives in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
 ## Install
 
-The package is ESM-only, exposes only the root package entrypoint, and is not published to npm yet. Consumers should use `import` / `export` syntax; CommonJS `require()` is intentionally unsupported.
+The package is published on npm, is ESM-only, and exposes only the root package entrypoint. Consumers should use `import` / `export` syntax; CommonJS `require()` is intentionally unsupported.
 
 For local development from this checkout:
 
@@ -41,14 +41,10 @@ For local development from this checkout:
 npm ci
 ```
 
-For consumption from another project before the first npm release:
+For consumption from another project:
 
 ```bash
-cd /path/to/codex-client
-npm ci
-
-cd /path/to/your-project
-npm install /path/to/codex-client
+npm install codex-app-server-client
 ```
 
 ## Validation
