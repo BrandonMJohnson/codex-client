@@ -23,6 +23,9 @@
     "bindings:generate": "tsx scripts/generate-bindings.ts",
     "bindings:check": "tsx scripts/check-bindings.ts",
     "build": "tsc -p tsconfig.build.json",
+    "docs:build": "vitepress build docs",
+    "docs:dev": "vitepress dev docs",
+    "docs:preview": "vitepress preview docs",
     "package:check": "node scripts/check-package.mjs",
     "prepare": "npm run build",
     "test": "vitest run",
@@ -41,6 +44,7 @@
     "@types/node": "^25.5.0",
     "tsx": "^4.20.5",
     "typescript": "^5.8.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.0"
   }
 }
