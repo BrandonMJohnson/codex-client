@@ -45,6 +45,7 @@ The protocol details in this plan are derived from that README, including:
 - Added a first-pass ergonomic `client.thread.*` namespace covering `thread/start`, `thread/resume`, `thread/read`, `thread/list`, and `thread/loaded/list`, with focused unit coverage plus a real stdio integration check for `thread/start`.
 - Exploratory QA against a live `codex app-server` also validated `thread/list`, `thread/loaded/list`, and `thread/read`; `thread/resume` on a freshly started thread returned a server-side `no rollout found` error, which led to documenting that only persisted rollouts are resumable.
 - Added a first-pass `client.turn.start()` helper plus deterministic real stdio coverage proving that a completed turn persists enough rollout history for a later `thread.resume` call to succeed and return lossy turn items.
+- Expanded the stable `client.turn.*` namespace with `turn.steer()` and `turn.interrupt()` helpers, added focused unit coverage for RPC routing, and added a real stdio integration test that verifies `turn/interrupt` resolves and later emits a `turn/completed` notification with `status: "interrupted"`.
 - Published the repository to GitHub, added a baseline `CI` workflow for typecheck/build/test, enabled Dependabot for npm and GitHub Actions updates, and documented the protected-branch pull request workflow in repo guidance.
 - Tightened the repo workflow guidance so contributors always fast-forward local `main` before creating a new feature branch.
 
@@ -171,7 +172,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 - [x] Implement `initialize()` and `initialized()`
 - [x] Implement thread APIs needed for normal usage
-- [ ] Implement turn APIs needed for normal usage
+- [x] Implement turn APIs needed for normal usage
 - [ ] Implement `command/exec*` APIs
 - [ ] Implement `fs/*` APIs
 - [ ] Implement `account/*` APIs
@@ -239,7 +240,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Implement RPC session manager
 - [x] Add stable bindings and regeneration scripts
 - [x] Implement initialize flow
-- [ ] Implement stable methods for thread, turn, command, and fs APIs
+- [ ] Implement stable methods for command and fs APIs
 - [ ] Implement event streaming
 - [ ] Implement approval handling
 - [ ] Add unit tests and basic integration tests

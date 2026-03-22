@@ -211,6 +211,121 @@ describe("codex app-server stdio integration", () => {
     },
     60_000
   );
+
+  itIfCodex(
+    "interrupts an active turn against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+      const turnNotifications: Array<{
+        method: "turn/started" | "turn/completed";
+        params: { threadId: string; turn: { id: string; status: string } };
+      }> = [];
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        client.onNotification((notification) => {
+          if (
+            notification.method === "turn/started" ||
+            notification.method === "turn/completed"
+          ) {
+            turnNotifications.push(
+              notification as (typeof turnNotifications)[number]
+            );
+          }
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const turnStart = await client.turn.start({
+          threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
+          input: [
+            {
+              type: "text",
+              text: "Print the word hello on separate lines 10000 times.",
+              text_elements: []
+            }
+          ]
+        });
+
+        await expect(
+          client.turn.interrupt({
+            threadId: threadStart.thread.id,
+            turnId: turnStart.turn.id
+          })
+        ).resolves.toEqual({});
+
+        const completed = await waitForTurnNotification(
+          turnNotifications,
+          "turn/completed",
+          turnStart.turn.id
+        );
+
+        expect(turnNotifications).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              method: "turn/started",
+              params: expect.objectContaining({
+                threadId: threadStart.thread.id,
+                turn: expect.objectContaining({
+                  id: turnStart.turn.id,
+                  status: "inProgress"
+                })
+              })
+            })
+          ])
+        );
+        expect(completed).toEqual(
+          expect.objectContaining({
+            method: "turn/completed",
+            params: expect.objectContaining({
+              threadId: threadStart.thread.id,
+              turn: expect.objectContaining({
+                id: turnStart.turn.id,
+                status: "interrupted"
+              })
+            })
+          })
+        );
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    30_000
+  );
 });
 
 function getCodexVersion(): string | null {
@@ -306,6 +421,36 @@ async function waitForCompletedThreadResume(
 
   throw new Error(
     `Timed out waiting for thread ${threadId} to resume with completed turn ${turnId}.`
+  );
+}
+
+async function waitForTurnNotification(
+  notifications: Array<{
+    method: "turn/started" | "turn/completed";
+    params: { threadId: string; turn: { id: string; status: string } };
+  }>,
+  method: "turn/started" | "turn/completed",
+  turnId: string
+): Promise<(typeof notifications)[number]> {
+  const deadline = Date.now() + 15_000;
+
+  while (Date.now() < deadline) {
+    const match = notifications.find(
+      (notification) =>
+        notification.method === method && notification.params.turn.id === turnId
+    );
+
+    if (match) {
+      return match;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  throw new Error(
+    `Timed out waiting for ${method} notification for turn ${turnId}.`
   );
 }
 

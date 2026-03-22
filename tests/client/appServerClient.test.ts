@@ -12,7 +12,9 @@ import {
   type ThreadResumeResponse,
   type ThreadStartResponse,
   type Turn,
+  type TurnInterruptResponse,
   type TurnStartResponse,
+  type TurnSteerResponse,
   type Transport,
   type TransportCloseListener,
   type TransportErrorListener,
@@ -484,10 +486,61 @@ describe("AppServerClient", () => {
       id: 2,
       result: createTurnStartResponse(createTurn("turn-1", "inProgress")) as JsonValue
     });
-
     await expect(turnStart).resolves.toEqual(
       createTurnStartResponse(createTurn("turn-1", "inProgress"))
     );
+
+    const turnSteer = client.turn.steer({
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [
+        {
+          type: "text",
+          text: "Please keep it brief.",
+          text_elements: []
+        }
+      ]
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "turn/steer",
+      params: {
+        threadId: "thread-1",
+        expectedTurnId: "turn-1",
+        input: [
+          {
+            type: "text",
+            text: "Please keep it brief.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createTurnSteerResponse("turn-1") as JsonValue
+    });
+    await expect(turnSteer).resolves.toEqual(createTurnSteerResponse("turn-1"));
+
+    const turnInterrupt = client.turn.interrupt({
+      threadId: "thread-1",
+      turnId: "turn-1"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "turn/interrupt",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1"
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createTurnInterruptResponse() as JsonValue
+    });
+    await expect(turnInterrupt).resolves.toEqual(createTurnInterruptResponse());
   });
 });
 
@@ -531,6 +584,16 @@ function createTurnStartResponse(turn: Turn): TurnStartResponse {
   return {
     turn
   };
+}
+
+function createTurnSteerResponse(turnId: string): TurnSteerResponse {
+  return {
+    turnId
+  };
+}
+
+function createTurnInterruptResponse(): TurnInterruptResponse {
+  return {};
 }
 
 function createThreadReadResponse(thread: Thread): ThreadReadResponse {
