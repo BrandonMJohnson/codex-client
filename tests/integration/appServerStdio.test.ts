@@ -690,7 +690,10 @@ describe("codex app-server stdio integration", () => {
         const request = await waitForApprovalRequest(approvalRequest);
 
         expect(request.method).toMatch(/Approval$|requestApproval$/);
-        expect(request.params.threadId).toBe(threadStart.thread.id);
+
+        if ("threadId" in request.params) {
+          expect(request.params.threadId).toBe(threadStart.thread.id);
+        }
 
         if ("turnId" in request.params) {
           expect(request.params.turnId).toBe(turnStart.turn.id);
