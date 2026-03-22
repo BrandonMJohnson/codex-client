@@ -1,10 +1,10 @@
 # API Surface
 
-The package exposes four layers from the top-level entrypoint:
+The package exposes four layers from the top-level entrypoint so you can choose the level of abstraction that fits your application.
 
 ## `AppServerClient`
 
-Most consumers should start here. `AppServerClient` wraps the protocol in a typed, layered API and keeps the low-level escape hatches available when you need them.
+Most consumers should start here. `AppServerClient` handles the initialize lifecycle, exposes typed request helpers, and includes higher-level helpers for streamed turns and approval flows.
 
 The detailed reference lives on the dedicated page:
 

@@ -1,13 +1,21 @@
 # Guide
 
-`codex-app-server-client` wraps the `codex app-server` protocol in a layered TypeScript API:
+`codex-app-server-client` is a TypeScript client for `codex app-server`. It gives applications a typed way to:
+
+- connect to a live app-server process over `stdio`
+- complete the required `initialize` -> `initialized` handshake
+- start threads and turns
+- consume streamed turn and item events
+- handle approval and server-request callbacks
+
+The package is structured in layers:
 
 - `transport/` manages newline-delimited JSON over `stdio`
 - `rpc/` handles request ids, responses, notifications, and server-initiated requests
 - `protocol/` exposes curated generated bindings
 - `client/` provides higher-level helpers for common thread, turn, and approval flows
 
-The protocol source of truth remains the upstream [`codex app-server` README](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md). This guide focuses on how to use this client library well.
+This guide shows the normal client flow: connect, initialize, start a thread, run a turn, stream events, and respond to approvals.
 
 ## Requirements
 
@@ -45,7 +53,7 @@ The package runs `prepare` during install, so the built `dist/` output is genera
 
 ## Start The App-Server
 
-The most direct setup is to spawn `codex app-server` as a child process and connect the client to its stdio streams.
+The usual setup is to spawn `codex app-server` as a child process and connect the client to its stdio streams.
 
 ```ts
 import { spawn } from "node:child_process";
@@ -65,7 +73,7 @@ const transport = new StdioTransport({
 const client = new AppServerClient({ transport });
 ```
 
-This keeps the transport boundary explicit. If you want raw protocol access later, you can stay at the transport or RPC layers without rewriting everything around the client helper.
+This keeps the transport boundary explicit and makes it easy to drop to lower-level APIs later if you need raw protocol access.
 
 ## Initialize A Client
 
@@ -99,7 +107,7 @@ console.log(models.data.map((model) => model.id));
 
 ## Run Threads And Turns
 
-The client exposes both thin request wrappers and higher-level helpers.
+The turn and thread APIs include both direct request helpers and higher-level composition helpers.
 
 ### Start A Thread
 
@@ -238,17 +246,17 @@ client.handleRequest("item/tool/call", async () => {
 });
 ```
 
-This keeps approval handling explicit and typed without forcing every consumer onto the higher-level convenience API.
+This keeps approval handling typed while still leaving room for lower-level request control when your application needs it.
 
 ## Drop To Lower-Level APIs
 
-The library is layered on purpose. If you outgrow `AppServerClient`, you can work at a lower level:
+If `AppServerClient` is more abstraction than you want, you can work at a lower level:
 
 - Use `StdioTransport` when you only need framed JSON transport
 - Use `RpcSession` when you want request/response routing and initialize-state enforcement without the ergonomic helpers
 - Use curated protocol exports from `protocol/` when you need protocol-shaped types in your own abstractions
 
-That split is useful when building your own orchestration layer, debugging raw server behavior, or experimenting with new upstream methods before the client surface grows around them.
+That split is useful when building your own orchestration layer, debugging server behavior, or experimenting with methods that are not yet wrapped by the ergonomic client.
 
 ## Bindings And Schemas
 
@@ -275,4 +283,4 @@ npm run docs:dev
 npm run docs:build
 ```
 
-The guide site is built with VitePress and published from the `docs/` directory. That gives the project a framework-style documentation experience without moving the source of truth away from the repository.
+The docs live in `docs/`, build with VitePress, and publish from GitHub Pages.
