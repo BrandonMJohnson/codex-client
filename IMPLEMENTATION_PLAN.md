@@ -27,7 +27,7 @@ The protocol details in this plan are derived from that README, including:
 
 - Rewrote the README so it reads like an open source project entrypoint instead of an internal progress note, adding clearer positioning, requirements, quick-start usage, API overview, event-model documentation, approval/request examples, binding guidance, and contributor-oriented development instructions.
 - Aligned the implementation checklist with already-landed work by marking experimental bindings support, ergonomic helpers, and docs/examples progress more accurately.
-- Hardened package-consumer flows by whitelisting shipped package files, adding `prepare` / `prepack` build hooks, and adding a `package:check` smoke test that packs the library, installs it into a temporary consumer project, and verifies the main exports resolve from the installed tarball.
+- Hardened package-consumer flows by whitelisting the published runtime/doc files, adding `prepare` / `prepack` build hooks, and adding a `package:check` smoke test that packs the library, installs it into a temporary consumer project, and verifies the main exports resolve from the installed tarball.
 
 ### 2026-03-21
 

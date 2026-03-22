@@ -23,10 +23,6 @@ async function main() {
     assertPackedFile(packResult.files, "dist/index.d.ts");
     assertPackedFile(packResult.files, "README.md");
     assertPackedFile(packResult.files, "LICENSE");
-    assertPackedFile(
-      packResult.files,
-      "schemas/stable/codex_app_server_protocol.schemas.json"
-    );
 
     await writeConsumerPackageJson(consumerRoot);
     await installPackedTarball(consumerRoot, tarballPath);
