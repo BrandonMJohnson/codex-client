@@ -32,6 +32,7 @@ npm run test:integration
 ## Repository Workflow
 
 - `main` is the protected release branch.
+- Start new work by pulling the latest `main` with `git pull --ff-only origin main`, then create your feature branch.
 - Changes should land through pull requests instead of direct pushes.
 - GitHub Actions runs `CI` and `Bindings` checks for pull requests and `main`.
 - Dependabot keeps npm and GitHub Actions dependencies moving through reviewable pull requests.

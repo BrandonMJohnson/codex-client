@@ -67,6 +67,7 @@ This is guidance, not a frozen constraint, but the spirit matters: keep concerns
 
 Manageable git history is a hard requirement.
 
+- Before creating a feature branch, run `git pull --ff-only origin main` from `main` so new work always starts from the latest protected branch tip.
 - All changes must be committed in manageable chunks.
 - Do not let large unrelated edits accumulate in a single commit.
 - Keep commits scoped to a single logical step whenever possible.
@@ -91,6 +92,7 @@ Only after review and QA have both completed is the task considered done.
 ## GitHub Repository Workflow
 
 - `main` is the protected branch.
+- Start feature work by updating local `main` with `git pull --ff-only origin main`, then branch from that refreshed tip.
 - Push feature work to a branch and land it through a pull request.
 - Keep required GitHub checks green before merge.
 - The baseline required checks are the `CI` workflow and the `Bindings` workflow.
