@@ -26,8 +26,11 @@ import type {
   ThreadReadResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
+  Turn,
   ThreadStartParams,
-  ThreadStartResponse
+  ThreadStartResponse,
+  TurnStartParams,
+  TurnStartResponse
 } from "../protocol/index.js";
 import type { JsonValue, Transport, TransportState } from "../transport/transport.js";
 
@@ -64,12 +67,17 @@ type StableClientRequestMap = {
     readonly params: ThreadStartParams;
     readonly response: ThreadStartResponse;
   };
+  readonly "turn/start": {
+    readonly params: TurnStartParams;
+    readonly response: TurnStartResponse;
+  };
 };
 
 export type AppServerClientModel = Model;
 export type AppServerClientSkill = SkillsListEntry;
 export type AppServerClientApp = AppInfo;
 export type AppServerClientThread = Thread;
+export type AppServerClientTurn = Turn;
 
 export interface AppServerClientThreadApi {
   start(params: ThreadStartParams): Promise<ThreadStartResponse>;
@@ -85,6 +93,16 @@ export interface AppServerClientThreadApi {
   loadedList(
     params?: ThreadLoadedListParams
   ): Promise<ThreadLoadedListResponse>;
+}
+
+export interface AppServerClientTurnApi {
+  /**
+   * Start a new turn on an existing thread. The server streams the turn's
+   * progress via notifications and sends the final state separately, so callers
+   * should usually pair this with notification handling when they need to wait
+   * for completion.
+   */
+  start(params: TurnStartParams): Promise<TurnStartResponse>;
 }
 
 export interface AppServerClientOptions {
@@ -109,6 +127,7 @@ export class AppServerClient {
   #initializedPromise: Promise<void> | undefined;
 
   public readonly thread: AppServerClientThreadApi;
+  public readonly turn: AppServerClientTurnApi;
 
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
@@ -121,6 +140,9 @@ export class AppServerClient {
       list: async (params = {}) => await this.#request("thread/list", params),
       loadedList: async (params = {}) =>
         await this.#request("thread/loaded/list", params)
+    };
+    this.turn = {
+      start: async (params) => await this.#request("turn/start", params)
     };
   }
 

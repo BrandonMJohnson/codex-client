@@ -11,6 +11,8 @@ import {
   type ThreadReadResponse,
   type ThreadResumeResponse,
   type ThreadStartResponse,
+  type Turn,
+  type TurnStartResponse,
   type Transport,
   type TransportCloseListener,
   type TransportErrorListener,
@@ -435,6 +437,58 @@ describe("AppServerClient", () => {
       nextCursor: null
     });
   });
+
+  it("routes turn namespace helpers to the stable turn RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const turnStart = client.turn.start({
+      threadId: "thread-1",
+      input: [
+        {
+          type: "text",
+          text: "Say hello",
+          text_elements: []
+        }
+      ]
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Say hello",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(createTurn("turn-1", "inProgress")) as JsonValue
+    });
+
+    await expect(turnStart).resolves.toEqual(
+      createTurnStartResponse(createTurn("turn-1", "inProgress"))
+    );
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -473,9 +527,29 @@ function createThreadResumeResponse(thread: Thread): ThreadResumeResponse {
   return createThreadStartResponse(thread);
 }
 
+function createTurnStartResponse(turn: Turn): TurnStartResponse {
+  return {
+    turn
+  };
+}
+
 function createThreadReadResponse(thread: Thread): ThreadReadResponse {
   return {
     thread
+  };
+}
+
+function createTurn(
+  turnId: string,
+  status: Turn["status"],
+  overrides: Partial<Turn> = {}
+): Turn {
+  return {
+    id: turnId,
+    items: [],
+    status,
+    error: null,
+    ...overrides
   };
 }
 

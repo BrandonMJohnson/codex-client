@@ -42,6 +42,7 @@ export type {
   ThreadResumeResponse,
   ThreadStartParams,
   ThreadStartResponse,
+  Turn,
   TurnStartParams,
   TurnStartResponse,
 } from "../generated/stable/v2/index.js";
