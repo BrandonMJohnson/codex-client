@@ -1,34 +1,34 @@
 # API Surface
 
-The package exports four main layers from the top-level entrypoint:
+The package exposes four layers from the top-level entrypoint:
 
 ## `AppServerClient`
 
-The ergonomic surface for most consumers. It handles the required initialize handshake, exposes typed methods for common protocol endpoints, and includes higher-level helpers for streamed turn execution and approval registration.
+Most consumers should start here. `AppServerClient` wraps the protocol in a typed, layered API and keeps the low-level escape hatches available when you need them.
 
-Current high-level areas include:
+The detailed reference lives on the dedicated page:
 
-- `client.initialize()`
-- `client.modelList()`, `client.skillsList()`, and `client.appList()`
-- `client.thread.*`
-- `client.turn.*`
-- `client.command.*`
-- `client.fs.*`
-- `client.account.*`
-- `client.onEvent()`, `client.onNotification()`, `client.onServerRequest()`, and `client.handleRequest()`
-- `client.handleApprovals()`
+- [AppServerClient reference](/reference/app-server-client)
+
+That page covers:
+
+- lifecycle methods like `start()`, `initialize()`, `initialized()`, and `close()`
+- catalog methods like `appList()`, `modelList()`, and `skillsList()`
+- the `thread`, `turn`, `command`, `fs`, and `account` namespaces
+- event, request, approval, error, and close subscriptions
+- streamed helper results such as `turn.run()` and `thread.run()`
 
 ## `StdioTransport`
 
-The transport implementation for newline-delimited JSON frames over stdio. Use this when you want explicit control over process lifecycle and framing, or when you want to compose your own client stack on top.
+The newline-delimited JSON transport for stdio. Use this when you want explicit process and stream control or when you are composing your own client stack.
 
 ## `RpcSession`
 
-The middle layer between transport and client ergonomics. It tracks outbound request ids, correlates responses, routes notifications separately from responses, and enforces the `initialize` then `initialized` connection lifecycle.
+The layer between transport and `AppServerClient`. It tracks request ids, correlates responses, routes notifications, routes server-initiated requests, and enforces the initialize lifecycle.
 
 ## Protocol Exports
 
-Curated protocol types are re-exported from the package entrypoint so application code can stay aligned with the generated schemas without importing from `src/generated/` directly.
+Curated protocol types are re-exported from the package entrypoint so applications can stay aligned with the generated schemas without importing from `src/generated/` directly.
 
 For the detailed source of truth on protocol behavior, see:
 
