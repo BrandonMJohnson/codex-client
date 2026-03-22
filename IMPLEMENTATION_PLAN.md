@@ -54,6 +54,7 @@ The protocol details in this plan are derived from that README, including:
 - Kept raw notification passthrough available on the client surface and added typed `client.onEvent(method, listener)` subscriptions for generated server notification methods, with focused unit coverage plus real stdio integration coverage using typed turn lifecycle events.
 - Added typed `client.onServerRequest(method, listener)` and `client.handleRequest(method, handler)` helpers for stable server-initiated approval and request flows, covering command execution approvals, file change approvals, permission grants, dynamic tool calls, MCP elicitations, tool user-input requests, and ChatGPT token refresh requests with generated response typing.
 - Added focused unit coverage proving typed inbound request filtering, automatic protocol-shaped responses, and JSON-RPC internal-error fallbacks for failing request handlers, then re-ran the full `typecheck`, `build`, and `test` validation suite.
+- Added a targeted real stdio integration test that prompts the live server with `Try to do something that will require my approval.`, captures the resulting approval callback, responds through the client API, and asserts the matching `serverRequest/resolved` notification arrives.
 
 ## Architectural Direction
 

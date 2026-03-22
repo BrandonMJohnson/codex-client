@@ -527,6 +527,231 @@ describe("codex app-server stdio integration", () => {
   );
 
   itIfCodex(
+    "receives a live approval request when a turn asks to require approval",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+      const resolvedNotifications: Array<
+        AppServerClientNotificationOf<"serverRequest/resolved">
+      > = [];
+      const turnNotifications: Array<
+        | AppServerClientNotificationOf<"turn/started">
+        | AppServerClientNotificationOf<"turn/completed">
+      > = [];
+      let settleApprovalRequest:
+        | ((
+            value: {
+              requestId: string | number;
+              method:
+                | "item/commandExecution/requestApproval"
+                | "item/fileChange/requestApproval"
+                | "item/permissions/requestApproval"
+                | "item/tool/call"
+                | "mcpServer/elicitation/request";
+              params: Record<string, unknown>;
+            }
+          ) => void)
+        | undefined;
+      const approvalRequest = new Promise<{
+        requestId: string | number;
+        method:
+          | "item/commandExecution/requestApproval"
+          | "item/fileChange/requestApproval"
+          | "item/permissions/requestApproval"
+          | "item/tool/call"
+          | "mcpServer/elicitation/request";
+        params: Record<string, unknown>;
+      }>((resolve) => {
+        settleApprovalRequest = resolve;
+      });
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        client.onEvent("turn/started", (notification) => {
+          turnNotifications.push(notification);
+        });
+        client.onEvent("turn/completed", (notification) => {
+          turnNotifications.push(notification);
+        });
+        client.onEvent("serverRequest/resolved", (notification) => {
+          resolvedNotifications.push(notification);
+        });
+
+        const stopHandlers = [
+          client.handleRequest(
+            "item/commandExecution/requestApproval",
+            async (request) => {
+              settleApprovalRequest?.({
+                requestId: request.id,
+                method: request.method,
+                params: request.params as Record<string, unknown>
+              });
+              settleApprovalRequest = undefined;
+              return {
+                decision: "decline"
+              };
+            }
+          ),
+          client.handleRequest("item/fileChange/requestApproval", async (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              decision: "decline"
+            };
+          }),
+          client.handleRequest(
+            "item/permissions/requestApproval",
+            async (request) => {
+              settleApprovalRequest?.({
+                requestId: request.id,
+                method: request.method,
+                params: request.params as Record<string, unknown>
+              });
+              settleApprovalRequest = undefined;
+              return {
+                permissions: {},
+                scope: "turn"
+              };
+            }
+          ),
+          client.handleRequest("item/tool/call", async (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              success: false,
+              contentItems: []
+            };
+          }),
+          client.handleRequest("mcpServer/elicitation/request", async (request) => {
+            settleApprovalRequest?.({
+              requestId: request.id,
+              method: request.method,
+              params: request.params as Record<string, unknown>
+            });
+            settleApprovalRequest = undefined;
+            return {
+              action: "decline",
+              content: null,
+              _meta: null
+            };
+          })
+        ];
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          approvalPolicy: "on-request",
+          approvalsReviewer: "user",
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const turnStart = await client.turn.start({
+          threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
+          approvalPolicy: "on-request",
+          input: [
+            {
+              type: "text",
+              text: "Try to do something that will require my approval.",
+              text_elements: []
+            }
+          ]
+        });
+
+        const request = await waitForApprovalRequest(approvalRequest);
+
+        expect(request.method).toMatch(/requestApproval|item\/tool\/call|elicitation/);
+        expect(request.params.threadId).toBe(threadStart.thread.id);
+
+        if ("turnId" in request.params) {
+          expect(request.params.turnId).toBe(turnStart.turn.id);
+        }
+
+        if (request.method === "item/commandExecution/requestApproval") {
+          expect(request.params.command).toEqual(expect.any(String));
+          expect(request.params.cwd).toBe(process.cwd());
+          expect(request.params.availableDecisions).toEqual(
+            expect.arrayContaining([expect.any(String)])
+          );
+        }
+
+        const resolved = await waitForResolvedRequestNotification(
+          resolvedNotifications,
+          threadStart.thread.id,
+          request.requestId
+        );
+
+        expect(resolved).toEqual({
+          method: "serverRequest/resolved",
+          params: {
+            threadId: threadStart.thread.id,
+            requestId: request.requestId
+          }
+        });
+        await expect(
+          waitForTurnNotification(
+            turnNotifications,
+            "turn/completed",
+            turnStart.turn.id
+          )
+        ).resolves.toEqual(
+          expect.objectContaining({
+            method: "turn/completed",
+            params: expect.objectContaining({
+              threadId: threadStart.thread.id,
+              turn: expect.objectContaining({
+                id: turnStart.turn.id
+              })
+            })
+          })
+        );
+
+        stopHandlers.forEach((stop) => {
+          stop();
+        });
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
     "executes a standalone command against a real app-server",
     async () => {
       const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
@@ -1013,6 +1238,37 @@ async function waitForCompletedThreadResume(
   );
 }
 
+async function waitForApprovalRequest(
+  request: Promise<{
+    requestId: string | number;
+    method:
+      | "item/commandExecution/requestApproval"
+      | "item/fileChange/requestApproval"
+      | "item/permissions/requestApproval"
+      | "item/tool/call"
+      | "mcpServer/elicitation/request";
+    params: Record<string, unknown>;
+  }>
+): Promise<{
+  requestId: string | number;
+  method:
+    | "item/commandExecution/requestApproval"
+    | "item/fileChange/requestApproval"
+    | "item/permissions/requestApproval"
+    | "item/tool/call"
+    | "mcpServer/elicitation/request";
+  params: Record<string, unknown>;
+}> {
+  return await Promise.race([
+    request,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Timed out waiting for a live approval request."));
+      }, 45_000);
+    })
+  ]);
+}
+
 async function waitForTurnNotification(
   notifications: Array<{
     method: "turn/started" | "turn/completed";
@@ -1040,6 +1296,36 @@ async function waitForTurnNotification(
 
   throw new Error(
     `Timed out waiting for ${method} notification for turn ${turnId}.`
+  );
+}
+
+async function waitForResolvedRequestNotification(
+  notifications: Array<AppServerClientNotificationOf<"serverRequest/resolved">>,
+  threadId: string,
+  requestId: string | number
+): Promise<AppServerClientNotificationOf<"serverRequest/resolved">> {
+  const deadline = Date.now() + 15_000;
+
+  while (Date.now() < deadline) {
+    const match = notifications.find(
+      (notification) =>
+        notification.params.threadId === threadId &&
+        notification.params.requestId === requestId
+    );
+
+    if (match) {
+      return match;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  throw new Error(
+    `Timed out waiting for serverRequest/resolved notification for request ${String(
+      requestId
+    )}.`
   );
 }
 
