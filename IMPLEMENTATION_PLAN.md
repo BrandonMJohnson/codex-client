@@ -25,6 +25,10 @@ The protocol details in this plan are derived from that README, including:
 
 ### 2026-03-22
 
+- Clarified that the published package surface is root-only, with subpath imports intentionally unsupported, and tightened the package smoke test so it enforces that contract from the packed tarball.
+- Made the package's ESM-only support policy explicit in the docs and packaging checks, including verification that CommonJS `require()` is not a supported consumption path.
+- Added a lightweight release workflow with a seeded `CHANGELOG.md`, a `RELEASING.md` guide, a `release:check` script, and a manual CI-backed release gate so release candidates can be validated before tagging.
+
 - Slimmed the README into a true repository entrypoint and moved the detailed client API material into the docs site, including a new `AppServerClient` reference page that walks the exposed client surface method-by-method with examples.
 - Tightened the repository QA workflow so QA explicitly validates changed docs against the current code, examples, commands, and contributor workflows instead of treating docs as build-only artifacts.
 - Added a VitePress documentation site under `docs/` with a landing page, a long-form guide, and a concise API-surface reference so the project can publish framework-style docs similar in spirit to larger guide sites without turning the README into a monolith.
@@ -254,10 +258,10 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 ### 10. Packaging And Release
 
-- [ ] Define the public package entrypoints
-- [ ] Decide ESM-only vs dual ESM/CJS support
+- [x] Define the public package entrypoints
+- [x] Decide ESM-only vs dual ESM/CJS support
 - [x] Add API docs and examples
-- [ ] Add a changelog/release process
+- [x] Add a changelog/release process
 - [ ] Publish once the stable surface is proven
 
 ## Recommended Delivery Phases
@@ -287,7 +291,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Add ergonomic helper APIs
 - [x] Improve docs and examples
 - [x] Add stronger CI validation around generated bindings
-- [ ] Finalize release packaging
+- [x] Finalize release packaging
 - [x] Reconcile README install guidance with the final packaging/install path after release packaging work lands
 - [ ] Publish the package
 
