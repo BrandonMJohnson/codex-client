@@ -25,6 +25,8 @@ The protocol details in this plan are derived from that README, including:
 
 ### 2026-03-22
 
+- Slimmed the README into a true repository entrypoint and moved the detailed client API material into the docs site, including a new `AppServerClient` reference page that walks the exposed client surface method-by-method with examples.
+- Tightened the repository QA workflow so QA explicitly validates changed docs against the current code, examples, commands, and contributor workflows instead of treating docs as build-only artifacts.
 - Added a VitePress documentation site under `docs/` with a landing page, a long-form guide, and a concise API-surface reference so the project can publish framework-style docs similar in spirit to larger guide sites without turning the README into a monolith.
 - Added `docs:dev`, `docs:build`, and `docs:preview` scripts, taught CI to build the docs site, and added a dedicated GitHub Pages workflow that publishes the guide from `main`.
 - Rewrote the README so it reads like an open source project entrypoint instead of an internal progress note, adding clearer positioning, requirements, quick-start usage, API overview, event-model documentation, approval/request examples, binding guidance, and contributor-oriented development instructions.

@@ -47,6 +47,9 @@ QA should explicitly:
 - confirm the tests are actually exercising the intended behavior
 - perform exploratory testing when the client can be run meaningfully
 - verify integration points, especially around protocol flows and lifecycle behavior
+- validate that any changed docs still describe the current behavior accurately
+- check that doc examples, commands, method names, and workflow guidance match the current code and tooling
+- verify that user-facing docs were updated when behavior, API surface, or contributor workflow changed
 - check that fixes from code review behave as intended
 - note any gaps in validation or coverage
 
@@ -76,6 +79,7 @@ QA findings should be actionable and easy to work through.
 
 - Put findings first.
 - Reference files, tests, commands, and behaviors when relevant.
+- Call out documentation drift explicitly when docs no longer match reality.
 - Distinguish clearly between verified behavior and unverified assumptions.
 - Be explicit about what passed, what failed, and what was not tested.
 - Keep summaries brief and secondary to findings.
@@ -104,5 +108,6 @@ A QA pass is complete only when:
 
 - relevant automated validation has been run or the gap is clearly documented
 - exploratory testing has been performed when feasible, or the blocker is clearly documented
+- changed documentation has been validated for accuracy against the current code and workflows
 - all meaningful QA findings have been addressed or consciously accepted
 - the change is ready for handoff
