@@ -31,7 +31,7 @@ The active roadmap lives in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
 ## Install
 
-The package is ESM-only, exposes only the root package entrypoint, and is not published to npm yet.
+The package is ESM-only, exposes only the root package entrypoint, and is not published to npm yet. Consumers should use `import` / `export` syntax; CommonJS `require()` is intentionally unsupported.
 
 For local development from this checkout:
 
