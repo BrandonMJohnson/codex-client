@@ -413,6 +413,8 @@ describe("codex app-server stdio integration", () => {
       const notifications: RpcNotificationMessage[] = [];
       const processId = "interactive-command-test";
       const streamedText = "hello from stdin";
+      const initialSizeText = "initial:80x24";
+      const resizedText = "resize:120x40";
 
       try {
         await client.initialize({
@@ -433,7 +435,10 @@ describe("codex app-server stdio integration", () => {
             "-e",
             [
               'process.stdin.setEncoding("utf8");',
-              'process.stdout.write("ready\\n");',
+              'process.stdout.write(`initial:${process.stdout.columns}x${process.stdout.rows}\\n`);',
+              "process.stdout.on('resize', () => {",
+              '  process.stdout.write(`resize:${process.stdout.columns}x${process.stdout.rows}\\n`);',
+              "});",
               "process.stdin.on('data', (chunk) => process.stdout.write(chunk));",
               "process.stdin.on('end', () => process.exit(0));"
             ].join("")
@@ -448,7 +453,7 @@ describe("codex app-server stdio integration", () => {
           }
         });
 
-        await waitForCommandOutput(notifications, processId, "ready");
+        await waitForCommandOutput(notifications, processId, initialSizeText);
 
         await expect(
           client.command.resize({
@@ -459,6 +464,7 @@ describe("codex app-server stdio integration", () => {
             }
           })
         ).resolves.toEqual({});
+        await waitForCommandOutput(notifications, processId, resizedText);
 
         await expect(
           client.command.write({
@@ -478,7 +484,8 @@ describe("codex app-server stdio integration", () => {
         });
 
         const stdoutText = collectCommandOutput(notifications, processId, "stdout");
-        expect(stdoutText).toContain("ready");
+        expect(stdoutText).toContain(initialSizeText);
+        expect(stdoutText).toContain(resizedText);
         expect(stdoutText).toContain(streamedText);
 
         await client.close();
