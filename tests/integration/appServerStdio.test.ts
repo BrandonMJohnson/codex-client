@@ -33,6 +33,13 @@ type CommandExecOutputDeltaNotification = {
   };
 };
 
+type StreamedTurnNotification =
+  | AppServerClientNotificationOf<"turn/started">
+  | AppServerClientNotificationOf<"item/started">
+  | AppServerClientNotificationOf<"item/agentMessage/delta">
+  | AppServerClientNotificationOf<"item/completed">
+  | AppServerClientNotificationOf<"turn/completed">;
+
 describe("codex app-server stdio integration", () => {
   itIfCodex(
     "completes initialize and model/list against a real app-server",
@@ -524,6 +531,268 @@ describe("codex app-server stdio integration", () => {
       }
     },
     30_000
+  );
+
+  itIfCodex(
+    "streams item lifecycle notifications against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+      const notifications: StreamedTurnNotification[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        client.onEvent("turn/started", (notification) => {
+          notifications.push(notification);
+        });
+        client.onEvent("item/started", (notification) => {
+          notifications.push(notification);
+        });
+        client.onEvent("item/agentMessage/delta", (notification) => {
+          notifications.push(notification);
+        });
+        client.onEvent("item/completed", (notification) => {
+          notifications.push(notification);
+        });
+        client.onEvent("turn/completed", (notification) => {
+          notifications.push(notification);
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const turnStart = await client.turn.start({
+          threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
+          input: [
+            {
+              type: "text",
+              text: "Reply with the exact text streaming-integration-check.",
+              text_elements: []
+            }
+          ]
+        });
+
+        await waitForMatchingStreamNotification(
+          notifications,
+          (notification): notification is AppServerClientNotificationOf<"turn/completed"> =>
+            notification.method === "turn/completed" &&
+            notification.params.turn.id === turnStart.turn.id,
+          `turn/completed notification for turn ${turnStart.turn.id}`
+        );
+
+        const completedAgentMessage = await waitForMatchingStreamNotification(
+          notifications,
+          (notification): notification is AppServerClientNotificationOf<"item/completed"> =>
+            notification.method === "item/completed" &&
+            notification.params.turnId === turnStart.turn.id &&
+            notification.params.item.type === "agentMessage",
+          `completed agentMessage item for turn ${turnStart.turn.id}`
+        );
+
+        if (completedAgentMessage.params.item.type !== "agentMessage") {
+          throw new Error("Expected the completed item notification to be an agentMessage.");
+        }
+
+        const agentMessageItemId = completedAgentMessage.params.item.id;
+        const itemStartedIndex = notifications.findIndex(
+          (notification) =>
+            notification.method === "item/started" &&
+            notification.params.turnId === turnStart.turn.id &&
+            notification.params.item.id === agentMessageItemId
+        );
+        const itemCompletedIndex = notifications.findIndex(
+          (notification) =>
+            notification.method === "item/completed" &&
+            notification.params.turnId === turnStart.turn.id &&
+            notification.params.item.id === agentMessageItemId
+        );
+        const deltaIndexes = notifications.flatMap((notification, index) => {
+          if (
+            notification.method !== "item/agentMessage/delta" ||
+            notification.params.turnId !== turnStart.turn.id ||
+            notification.params.itemId !== agentMessageItemId
+          ) {
+            return [];
+          }
+
+          return [index];
+        });
+        const turnCompletedIndex = notifications.findIndex(
+          (notification) =>
+            notification.method === "turn/completed" &&
+            notification.params.turn.id === turnStart.turn.id
+        );
+        const streamedAgentText = collectAgentMessageDeltaText(
+          notifications,
+          agentMessageItemId
+        );
+
+        expect(itemStartedIndex).toBeGreaterThanOrEqual(0);
+        expect(itemCompletedIndex).toBeGreaterThan(itemStartedIndex);
+        expect(deltaIndexes.length).toBeGreaterThan(0);
+        expect(deltaIndexes.every((index) => index > itemStartedIndex)).toBe(true);
+        expect(deltaIndexes.every((index) => index < itemCompletedIndex)).toBe(true);
+        expect(turnCompletedIndex).toBeGreaterThan(itemCompletedIndex);
+        expect(normalizeNotificationText(streamedAgentText).length).toBeGreaterThan(0);
+        expect(
+          normalizeNotificationText(completedAgentMessage.params.item.text)
+        ).toContain(normalizeNotificationText(streamedAgentText));
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodex(
+    "suppresses opted-out turn and delta notifications against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+      const rawMethods: string[] = [];
+      const itemStartedNotifications: Array<AppServerClientNotificationOf<"item/started">> =
+        [];
+      const itemCompletedNotifications: Array<AppServerClientNotificationOf<"item/completed">> =
+        [];
+      const turnCompletedNotifications: Array<AppServerClientNotificationOf<"turn/completed">> =
+        [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: {
+            experimentalApi: false,
+            optOutNotificationMethods: [
+              "turn/started",
+              "item/agentMessage/delta"
+            ]
+          }
+        });
+        client.onNotification((notification) => {
+          rawMethods.push(notification.method);
+        });
+        client.onEvent("item/started", (notification) => {
+          itemStartedNotifications.push(notification);
+        });
+        client.onEvent("item/completed", (notification) => {
+          itemCompletedNotifications.push(notification);
+        });
+        client.onEvent("turn/completed", (notification) => {
+          turnCompletedNotifications.push(notification);
+        });
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const turnStart = await client.turn.start({
+          threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
+          input: [
+            {
+              type: "text",
+              text: "Reply with the exact text opt-out-check.",
+              text_elements: []
+            }
+          ]
+        });
+
+        await waitForMatchingTurnCompletedNotification(
+          turnCompletedNotifications,
+          (notification): notification is AppServerClientNotificationOf<"turn/completed"> =>
+            notification.method === "turn/completed" &&
+            notification.params.turn.id === turnStart.turn.id,
+          `turn/completed notification for opted-out turn ${turnStart.turn.id}`
+        );
+
+        expect(
+          rawMethods.includes("turn/started")
+        ).toBe(false);
+        expect(
+          rawMethods.includes("item/agentMessage/delta")
+        ).toBe(false);
+        expect(
+          itemStartedNotifications.some(
+            (notification) =>
+              notification.params.turnId === turnStart.turn.id
+          )
+        ).toBe(true);
+        expect(
+          itemCompletedNotifications.some(
+            (notification) =>
+              notification.params.turnId === turnStart.turn.id
+          )
+        ).toBe(true);
+        expect(
+          turnCompletedNotifications.some(
+            (notification) =>
+              notification.params.turn.id === turnStart.turn.id
+          )
+        ).toBe(true);
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
   );
 
   itIfCodex(
@@ -1339,6 +1608,54 @@ async function waitForResolvedRequestNotification(
   );
 }
 
+async function waitForMatchingStreamNotification<T extends StreamedTurnNotification>(
+  notifications: StreamedTurnNotification[],
+  predicate: (notification: StreamedTurnNotification) => notification is T,
+  description: string,
+  timeoutMs = 15_000
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const match = notifications.find(predicate);
+
+    if (match) {
+      return match;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  throw new Error(`Timed out waiting for ${description}.`);
+}
+
+async function waitForMatchingTurnCompletedNotification(
+  notifications: Array<AppServerClientNotificationOf<"turn/completed">>,
+  predicate: (
+    notification: AppServerClientNotificationOf<"turn/completed">
+  ) => boolean,
+  description: string,
+  timeoutMs = 15_000
+): Promise<AppServerClientNotificationOf<"turn/completed">> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const match = notifications.find(predicate);
+
+    if (match) {
+      return match;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+  }
+
+  throw new Error(`Timed out waiting for ${description}.`);
+}
+
 function selectPreferredIntegrationModel(
   models: Array<{ id: string; model: string }>
 ): string | undefined {
@@ -1360,6 +1677,29 @@ function selectPreferredIntegrationModel(
   }
 
   return undefined;
+}
+
+function collectAgentMessageDeltaText(
+  notifications: StreamedTurnNotification[],
+  itemId: string
+): string {
+  return notifications
+    .flatMap((notification) => {
+      if (notification.method !== "item/agentMessage/delta") {
+        return [];
+      }
+
+      if (notification.params.itemId !== itemId) {
+        return [];
+      }
+
+      return [notification.params.delta];
+    })
+    .join("");
+}
+
+function normalizeNotificationText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
 }
 
 function collectCommandOutput(

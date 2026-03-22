@@ -57,6 +57,9 @@ The protocol details in this plan are derived from that README, including:
 - Added a targeted real stdio integration test that prompts the live server with `Try to do something that will require my approval.`, captures the resulting approval callback, responds through the client API, and asserts the matching `serverRequest/resolved` notification arrives.
 - Added client-configurable RPC request timeouts and `AbortSignal` cancellation support; once a request has gone on the wire, timing out or aborting it now closes the session so the client does not drift from the server on outstanding request ids.
 - Threaded the same request options through the ergonomic client helpers and added focused unit coverage for initialize timeout handling, post-initialize abort/timeout session closure, and option forwarding.
+- Added deterministic fixture coverage for the documented `turn/started` -> `item/started` -> delta/progress -> `item/completed` -> `turn/completed` streaming lifecycle, including ordered agent-message delta reconstruction and review-mode boundary items.
+- Documented the upstream README event-ordering assumptions in the client API comments and README so higher-level helpers can rely on the same lifecycle contract the fixture tests assert.
+- Added targeted real stdio integration coverage for live item-stream ordering and `optOutNotificationMethods` suppression so upstream notification drift is caught beyond the deterministic fixture tests.
 
 ## Architectural Direction
 
@@ -195,7 +198,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Support item lifecycle events
 - [x] Support delta events like `item/agentMessage/delta`
 - [x] Support token usage and error events
-- [ ] Document event ordering assumptions from the upstream README
+- [x] Document event ordering assumptions from the upstream README
 
 ### 6. Incoming Requests And Approvals
 
@@ -228,7 +231,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Unit test request/response correlation
 - [x] Unit test initialize gating
 - [x] Unit test incoming server-request routing
-- [ ] Fixture test streamed notification sequences
+- [x] Fixture test streamed notification sequences
 - [x] Integration test against a real `codex app-server --listen stdio://`
 - [x] Add CI coverage for stale binding detection
 

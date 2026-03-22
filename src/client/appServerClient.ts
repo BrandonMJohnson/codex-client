@@ -647,6 +647,18 @@ export class AppServerClient {
     return this.#session.onNotification(listener);
   }
 
+  /**
+   * Subscribe to a generated server notification method.
+   *
+   * app-server drives turn progress through ordered notifications: a turn emits
+   * `turn/started`, each streamed item emits `item/started`, then any
+   * item-specific delta/progress notifications, then `item/completed`, and the
+   * turn finishes with `turn/completed`.
+   *
+   * Callers can opt out of specific notification methods during initialize, so
+   * helpers built on top of this stream should tolerate missing lifecycle
+   * events when the connection has method-level suppression enabled.
+   */
   public onEvent<Method extends AppServerClientEventMethod>(
     method: Method,
     listener: (notification: AppServerClientNotificationOf<Method>) => void
