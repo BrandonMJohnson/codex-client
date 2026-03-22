@@ -37,6 +37,24 @@ Current highlights:
 
 The active roadmap lives in [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md).
 
+## Guide
+
+The repository now includes a VitePress guide site so the project can publish framework-style documentation instead of relying only on the README.
+
+- Local docs entrypoint: [docs/index.md](./docs/index.md)
+- Long-form guide: [docs/guide/index.md](./docs/guide/index.md)
+- API surface reference: [docs/reference/index.md](./docs/reference/index.md)
+
+Useful docs commands:
+
+```bash
+npm run docs:dev
+npm run docs:build
+npm run docs:preview
+```
+
+The `Docs` GitHub Actions workflow publishes the built site to GitHub Pages from `main`.
+
 ## Install
 
 The package is ESM-only and currently targets Node.js `>=24`.

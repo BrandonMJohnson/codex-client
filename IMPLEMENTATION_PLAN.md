@@ -25,6 +25,8 @@ The protocol details in this plan are derived from that README, including:
 
 ### 2026-03-22
 
+- Added a VitePress documentation site under `docs/` with a landing page, a long-form guide, and a concise API-surface reference so the project can publish framework-style docs similar in spirit to larger guide sites without turning the README into a monolith.
+- Added `docs:dev`, `docs:build`, and `docs:preview` scripts, taught CI to build the docs site, and added a dedicated GitHub Pages workflow that publishes the guide from `main`.
 - Rewrote the README so it reads like an open source project entrypoint instead of an internal progress note, adding clearer positioning, requirements, quick-start usage, API overview, event-model documentation, approval/request examples, binding guidance, and contributor-oriented development instructions.
 - Aligned the implementation checklist with already-landed work by marking experimental bindings support, ergonomic helpers, and docs/examples progress more accurately.
 - Hardened package-consumer flows by whitelisting the published runtime/doc files, adding a `prepare` build hook, and adding a `package:check` smoke test that packs the library, installs it into a temporary consumer project, and verifies the main exports resolve from the installed tarball.
@@ -252,7 +254,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 
 - [ ] Define the public package entrypoints
 - [ ] Decide ESM-only vs dual ESM/CJS support
-- [ ] Add API docs and examples
+- [x] Add API docs and examples
 - [ ] Add a changelog/release process
 - [ ] Publish once the stable surface is proven
 
