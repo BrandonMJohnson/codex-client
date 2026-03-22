@@ -290,15 +290,18 @@ describe("AppServerClient", () => {
     vi.useFakeTimers();
 
     try {
-      const transport = new FakeTransport();
-      const client = new AppServerClient({
-        transport,
+      const initializeTransport = new FakeTransport();
+      const initializeClient = new AppServerClient({
+        transport: initializeTransport,
         defaultRequestTimeoutMs: 20
       });
 
-      const timedOutInitialize = client.initialize(createInitializeParams(), {
-        sendInitialized: false
-      });
+      const timedOutInitialize = initializeClient.initialize(
+        createInitializeParams(),
+        {
+          sendInitialized: false
+        }
+      );
       void timedOutInitialize.catch(() => {});
       await flushAsyncWork();
       await vi.advanceTimersByTimeAsync(20);
@@ -306,21 +309,32 @@ describe("AppServerClient", () => {
       await expect(timedOutInitialize).rejects.toBeInstanceOf(
         RpcRequestTimeoutError
       );
+      expect(initializeClient.initializationState).toBe("closed");
 
-      const retry = client.initialize(createInitializeParams(), {
-        sendInitialized: false,
-        request: { timeoutMs: 50 }
+      await expect(
+        initializeClient.initialize(createInitializeParams(), {
+          sendInitialized: false
+        })
+      ).rejects.toBeInstanceOf(RpcStateError);
+
+      const transport = new FakeTransport();
+      const client = new AppServerClient({
+        transport
+      });
+
+      const initialize = client.initialize(createInitializeParams(), {
+        sendInitialized: false
       });
       await flushAsyncWork();
       transport.emitMessage({
-        id: 2,
+        id: 1,
         result: {
           userAgent: "codex",
           platformFamily: "unix",
           platformOs: "linux"
         }
       });
-      await retry;
+      await initialize;
       await client.initialized();
 
       const controller = new AbortController();
@@ -331,7 +345,7 @@ describe("AppServerClient", () => {
 
       await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
       transport.emitMessage({
-        id: 3,
+        id: 2,
         result: {
           data: [],
           nextCursor: null

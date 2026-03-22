@@ -44,8 +44,9 @@ type PendingRequest = {
   readonly resolve: (value: JsonValue) => void;
   readonly reject: (reason: Error) => void;
   readonly dispose: () => void;
-  ignoreResponse: boolean;
 };
+
+const LATE_RESPONSE_GRACE_PERIOD_MS = 5 * 60 * 1000;
 
 export interface RpcInboundRequest extends RpcRequestMessage {
   respond(result?: JsonValue): Promise<void>;
@@ -75,6 +76,7 @@ export class RpcSession {
   readonly #closeListeners = new ListenerSet<RpcSessionCloseListener>();
   readonly #errorListeners = new ListenerSet<RpcSessionErrorListener>();
   readonly #notificationListeners = new ListenerSet<RpcNotificationListener>();
+  readonly #ignoredResponseIds = new Map<RpcId, () => void>();
   readonly #pendingRequests = new Map<RpcId, PendingRequest>();
   readonly #requestListeners = new ListenerSet<RpcRequestListener>();
   readonly #transport: Transport;
@@ -167,8 +169,7 @@ export class RpcSession {
         method,
         resolve,
         reject,
-        dispose,
-        ignoreResponse: false
+        dispose
       });
 
       if (options.signal) {
@@ -343,6 +344,13 @@ export class RpcSession {
   }
 
   #handleResponse(message: RpcResponseMessage): void {
+    const ignoredResponseCleanup = this.#ignoredResponseIds.get(message.id);
+    if (ignoredResponseCleanup) {
+      this.#ignoredResponseIds.delete(message.id);
+      ignoredResponseCleanup();
+      return;
+    }
+
     const pendingRequest = this.#pendingRequests.get(message.id);
     if (!pendingRequest) {
       throw new RpcProtocolError(
@@ -352,13 +360,6 @@ export class RpcSession {
 
     this.#pendingRequests.delete(message.id);
     pendingRequest.dispose();
-
-    // Locally aborted or timed-out requests may still resolve on the server.
-    // Ignore that single late response so one impatient caller does not poison
-    // the whole session with an "unknown request id" protocol error.
-    if (pendingRequest.ignoreResponse) {
-      return;
-    }
 
     if ("error" in message) {
       if (pendingRequest.method === "initialize") {
@@ -398,13 +399,21 @@ export class RpcSession {
       return;
     }
 
-    // Keep the request id reserved until a late server response arrives or the
-    // session closes, otherwise a legitimate straggler would look like a
-    // protocol violation and tear down the connection.
-    pendingRequest.ignoreResponse = true;
+    this.#pendingRequests.delete(id);
     pendingRequest.dispose();
-    this.#rollbackInitializationAfterSendFailure(pendingRequest.method);
     pendingRequest.reject(error);
+
+    if (pendingRequest.method === "initialize") {
+      // Once initialize has been written to the transport, the client cannot
+      // tell whether the server accepted it before the local timeout/abort.
+      // Closing the session avoids sending a second initialize on a connection
+      // whose handshake state may already have diverged.
+      this.#finalizeClose(error);
+      void this.#transport.close();
+      return;
+    }
+
+    this.#trackIgnoredResponseId(id);
   }
 
   #failPendingRequest(id: RpcId, error: Error): void {
@@ -429,6 +438,11 @@ export class RpcSession {
     this.#initializationState = "closed";
 
     const closeError = error ?? new RpcError("RPC session closed.");
+    for (const disposeIgnoredResponse of this.#ignoredResponseIds.values()) {
+      disposeIgnoredResponse();
+    }
+
+    this.#ignoredResponseIds.clear();
     for (const pendingRequest of this.#pendingRequests.values()) {
       pendingRequest.dispose();
       pendingRequest.reject(closeError);
@@ -445,6 +459,23 @@ export class RpcSession {
     this.#unsubscribeError = undefined;
     this.#unsubscribeClose?.();
     this.#unsubscribeClose = undefined;
+  }
+
+  #trackIgnoredResponseId(id: RpcId): void {
+    const existingCleanup = this.#ignoredResponseIds.get(id);
+    existingCleanup?.();
+
+    // Late responses are normal after a local timeout/abort, but we only keep
+    // a bounded grace window so a server that never replies cannot leak memory
+    // in long-lived client sessions.
+    const cleanupTimer = setTimeout(() => {
+      this.#ignoredResponseIds.delete(id);
+    }, LATE_RESPONSE_GRACE_PERIOD_MS);
+    cleanupTimer.unref?.();
+
+    this.#ignoredResponseIds.set(id, () => {
+      clearTimeout(cleanupTimer);
+    });
   }
 }
 

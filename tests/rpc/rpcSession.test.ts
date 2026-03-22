@@ -258,12 +258,17 @@ describe("RpcSession", () => {
     expect(session.initializationState).toBe("closed");
   });
 
-  it("times out pending requests, ignores the late response, and allows initialize retries", async () => {
+  it("times out initialize requests and closes the session because handshake state is no longer trustworthy", async () => {
     vi.useFakeTimers();
 
     try {
       const transport = new FakeTransport();
       const session = new RpcSession({ transport });
+      const closeEvents: Array<Error | undefined> = [];
+
+      session.onClose((error) => {
+        closeEvents.push(error);
+      });
 
       await session.start();
 
@@ -277,15 +282,12 @@ describe("RpcSession", () => {
       await expect(timedOutInitialize).rejects.toBeInstanceOf(
         RpcRequestTimeoutError
       );
-      expect(session.initializationState).toBe("preInitialize");
+      expect(session.initializationState).toBe("closed");
+      expect(closeEvents).toHaveLength(1);
 
-      transport.emitMessage({ id: 1, result: null });
-
-      const retry = session.request("initialize");
-      transport.emitMessage({ id: 2, result: null });
-
-      await expect(retry).resolves.toBeNull();
-      expect(session.initializationState).toBe("initializeReady");
+      await expect(session.request("initialize")).rejects.toBeInstanceOf(
+        RpcStateError
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -321,6 +323,44 @@ describe("RpcSession", () => {
 
     expect(errors).toEqual([]);
     expect(session.initializationState).toBe("initialized");
+  });
+
+  it("expires ignored late-response ids so abandoned requests do not accumulate forever", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const transport = new FakeTransport();
+      const session = new RpcSession({ transport });
+      const errors: Error[] = [];
+
+      session.onError((error) => {
+        errors.push(error);
+      });
+
+      await session.start();
+
+      const initialize = session.request("initialize");
+      transport.emitMessage({ id: 1, result: null });
+      await initialize;
+      await session.initialized();
+
+      const controller = new AbortController();
+      const modelList = session.request("model/list", undefined, {
+        signal: controller.signal
+      });
+      void modelList.catch(() => {});
+      controller.abort();
+      await expect(modelList).rejects.toBeInstanceOf(RpcRequestAbortedError);
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+      transport.emitMessage({ id: 2, result: ["gpt-5.4"] });
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toBeInstanceOf(RpcProtocolError);
+      expect(session.initializationState).toBe("closed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects already-aborted requests before sending anything", async () => {
