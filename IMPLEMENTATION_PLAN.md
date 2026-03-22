@@ -282,6 +282,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Improve docs and examples
 - [x] Add stronger CI validation around generated bindings
 - [ ] Finalize release packaging
+- [ ] Reconcile README install guidance with the final packaging/install path after release packaging work lands
 - [ ] Publish the package
 
 ## Open Decisions
