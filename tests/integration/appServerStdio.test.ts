@@ -1,5 +1,8 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -566,6 +569,162 @@ describe("codex app-server stdio integration", () => {
         await waitForExit(child);
       } finally {
         await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "executes fs helpers against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+      const tempRoot = await mkdtemp(
+        join(tmpdir(), "codex-app-server-client-fs-")
+      );
+      const workspaceDir = join(tempRoot, "workspace", "nested");
+      const sourceFile = join(workspaceDir, "source.txt");
+      const copiedFile = join(workspaceDir, "copy.txt");
+      const fileContents = "filesystem-client-api\n";
+      const fileContentsBase64 = Buffer.from(fileContents, "utf8").toString(
+        "base64"
+      );
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        await expect(
+          client.fs.createDirectory({
+            path: workspaceDir,
+            recursive: true
+          })
+        ).resolves.toEqual({});
+
+        await expect(
+          client.fs.getMetadata({
+            path: workspaceDir
+          })
+        ).resolves.toEqual(
+          expect.objectContaining({
+            isDirectory: true,
+            isFile: false,
+            createdAtMs: expect.any(Number),
+            modifiedAtMs: expect.any(Number)
+          })
+        );
+
+        await expect(
+          client.fs.writeFile({
+            path: sourceFile,
+            dataBase64: fileContentsBase64
+          })
+        ).resolves.toEqual({});
+
+        await expect(
+          client.fs.readFile({
+            path: sourceFile
+          })
+        ).resolves.toEqual({
+          dataBase64: fileContentsBase64
+        });
+
+        await expect(
+          client.fs.copy({
+            sourcePath: sourceFile,
+            destinationPath: copiedFile
+          })
+        ).resolves.toEqual({});
+
+        await expect(
+          client.fs.getMetadata({
+            path: copiedFile
+          })
+        ).resolves.toEqual(
+          expect.objectContaining({
+            isDirectory: false,
+            isFile: true,
+            createdAtMs: expect.any(Number),
+            modifiedAtMs: expect.any(Number)
+          })
+        );
+
+        await expect(
+          client.fs.readDirectory({
+            path: workspaceDir
+          })
+        ).resolves.toEqual({
+          entries: expect.arrayContaining([
+            {
+              fileName: "copy.txt",
+              isDirectory: false,
+              isFile: true
+            },
+            {
+              fileName: "source.txt",
+              isDirectory: false,
+              isFile: true
+            }
+          ])
+        });
+
+        await expect(
+          client.fs.remove({
+            path: copiedFile,
+            force: true
+          })
+        ).resolves.toEqual({});
+
+        await expect(
+          client.fs.readDirectory({
+            path: workspaceDir
+          })
+        ).resolves.toEqual({
+          entries: [
+            {
+              fileName: "source.txt",
+              isDirectory: false,
+              isFile: true
+            }
+          ]
+        });
+
+        await expect(
+          client.fs.remove({
+            path: tempRoot,
+            recursive: true,
+            force: true
+          })
+        ).resolves.toEqual({});
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+        await rm(tempRoot, {
+          recursive: true,
+          force: true
+        });
       }
     },
     20_000

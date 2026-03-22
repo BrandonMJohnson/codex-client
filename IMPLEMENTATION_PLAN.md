@@ -49,6 +49,7 @@ The protocol details in this plan are derived from that README, including:
 - Published the repository to GitHub, added a baseline `CI` workflow for typecheck/build/test, enabled Dependabot for npm and GitHub Actions updates, and documented the protected-branch pull request workflow in repo guidance.
 - Tightened the repo workflow guidance so contributors always fast-forward local `main` before creating a new feature branch.
 - Added a first-pass `client.command.*` namespace covering `command/exec`, `command/exec/write`, `command/exec/resize`, and `command/exec/terminate`, with focused unit coverage plus a real stdio integration check for buffered standalone command execution.
+- Added a first-pass `client.fs.*` namespace covering `fs/readFile`, `fs/writeFile`, `fs/createDirectory`, `fs/getMetadata`, `fs/readDirectory`, `fs/remove`, and `fs/copy`, with focused unit coverage plus a real stdio integration flow against `codex app-server`.
 
 ## Architectural Direction
 
@@ -175,7 +176,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Implement thread APIs needed for normal usage
 - [x] Implement turn APIs needed for normal usage
 - [x] Implement `command/exec*` APIs
-- [ ] Implement `fs/*` APIs
+- [x] Implement `fs/*` APIs
 - [ ] Implement `account/*` APIs
 - [x] Implement `model/list`, `skills/list`, and `app/list`
 
@@ -241,7 +242,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Implement RPC session manager
 - [x] Add stable bindings and regeneration scripts
 - [x] Implement initialize flow
-- [ ] Implement stable methods for command and fs APIs
+- [x] Implement stable methods for command and fs APIs
 - [ ] Implement event streaming
 - [ ] Implement approval handling
 - [ ] Add unit tests and basic integration tests

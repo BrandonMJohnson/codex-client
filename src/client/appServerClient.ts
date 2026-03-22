@@ -17,11 +17,25 @@ import type {
   CommandExecTerminateResponse,
   CommandExecWriteParams,
   CommandExecWriteResponse,
+  FsCopyParams,
+  FsCopyResponse,
+  FsCreateDirectoryParams,
+  FsCreateDirectoryResponse,
+  FsGetMetadataParams,
+  FsGetMetadataResponse,
+  FsReadDirectoryParams,
+  FsReadDirectoryResponse,
   InitializeParams,
   InitializeResponse,
   Model,
   ModelListParams,
   ModelListResponse,
+  FsReadFileParams,
+  FsReadFileResponse,
+  FsRemoveParams,
+  FsRemoveResponse,
+  FsWriteFileParams,
+  FsWriteFileResponse,
   SkillsListEntry,
   SkillsListParams,
   SkillsListResponse,
@@ -66,6 +80,34 @@ type StableClientRequestMap = {
   readonly "command/exec/resize": {
     readonly params: CommandExecResizeParams;
     readonly response: CommandExecResizeResponse;
+  };
+  readonly "fs/copy": {
+    readonly params: FsCopyParams;
+    readonly response: FsCopyResponse;
+  };
+  readonly "fs/createDirectory": {
+    readonly params: FsCreateDirectoryParams;
+    readonly response: FsCreateDirectoryResponse;
+  };
+  readonly "fs/getMetadata": {
+    readonly params: FsGetMetadataParams;
+    readonly response: FsGetMetadataResponse;
+  };
+  readonly "fs/readDirectory": {
+    readonly params: FsReadDirectoryParams;
+    readonly response: FsReadDirectoryResponse;
+  };
+  readonly "fs/readFile": {
+    readonly params: FsReadFileParams;
+    readonly response: FsReadFileResponse;
+  };
+  readonly "fs/remove": {
+    readonly params: FsRemoveParams;
+    readonly response: FsRemoveResponse;
+  };
+  readonly "fs/writeFile": {
+    readonly params: FsWriteFileParams;
+    readonly response: FsWriteFileResponse;
   };
   readonly "model/list": {
     readonly params: ModelListParams;
@@ -182,6 +224,42 @@ export interface AppServerClientCommandApi {
   ): Promise<CommandExecTerminateResponse>;
 }
 
+export interface AppServerClientFsApi {
+  /**
+   * Read a file from the host filesystem as a base64 payload.
+   */
+  readFile(params: FsReadFileParams): Promise<FsReadFileResponse>;
+  /**
+   * Write a full base64 payload to a file on the host filesystem.
+   */
+  writeFile(params: FsWriteFileParams): Promise<FsWriteFileResponse>;
+  /**
+   * Create a directory on the host filesystem.
+   */
+  createDirectory(
+    params: FsCreateDirectoryParams
+  ): Promise<FsCreateDirectoryResponse>;
+  /**
+   * Inspect whether a path currently resolves to a file or directory and read
+   * its available timestamps.
+   */
+  getMetadata(params: FsGetMetadataParams): Promise<FsGetMetadataResponse>;
+  /**
+   * List the direct children of a directory.
+   */
+  readDirectory(
+    params: FsReadDirectoryParams
+  ): Promise<FsReadDirectoryResponse>;
+  /**
+   * Remove a file or directory tree from the host filesystem.
+   */
+  remove(params: FsRemoveParams): Promise<FsRemoveResponse>;
+  /**
+   * Copy a file or directory tree on the host filesystem.
+   */
+  copy(params: FsCopyParams): Promise<FsCopyResponse>;
+}
+
 export interface AppServerClientOptions {
   readonly transport: Transport;
   readonly requestIdFactory?: () => RpcId;
@@ -206,6 +284,7 @@ export class AppServerClient {
   public readonly thread: AppServerClientThreadApi;
   public readonly turn: AppServerClientTurnApi;
   public readonly command: AppServerClientCommandApi;
+  public readonly fs: AppServerClientFsApi;
 
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
@@ -232,6 +311,18 @@ export class AppServerClient {
         await this.#request("command/exec/resize", params),
       terminate: async (params) =>
         await this.#request("command/exec/terminate", params)
+    };
+    this.fs = {
+      readFile: async (params) => await this.#request("fs/readFile", params),
+      writeFile: async (params) => await this.#request("fs/writeFile", params),
+      createDirectory: async (params) =>
+        await this.#request("fs/createDirectory", params),
+      getMetadata: async (params) =>
+        await this.#request("fs/getMetadata", params),
+      readDirectory: async (params) =>
+        await this.#request("fs/readDirectory", params),
+      remove: async (params) => await this.#request("fs/remove", params),
+      copy: async (params) => await this.#request("fs/copy", params)
     };
   }
 
