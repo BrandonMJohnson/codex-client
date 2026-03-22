@@ -205,7 +205,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Expose pluggable handlers for approval and request flows
 - [x] Ensure responses are sent in the exact shapes expected by the protocol
 
-### 7. Experimental API Support
+### 7. Experimental API Support (On Hold)
 
 - [ ] Add connection-level `experimentalApi` opt-in support
 - [ ] Gate experimental methods and features in the client surface
