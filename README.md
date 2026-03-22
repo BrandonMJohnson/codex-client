@@ -13,7 +13,7 @@ The app-server protocol is notification-driven once a turn starts.
 - `turn/start` returns an initial turn snapshot immediately, but execution begins when `turn/started` arrives.
 - For a streamed item, expect `item/started`, then zero or more item-specific delta or progress notifications, then `item/completed`.
 - Reconstruct append-only text such as `item/agentMessage/delta` by concatenating deltas in arrival order.
-- Treat `turn/completed` as the terminal notification for a turn's final status and token usage.
+- Treat `turn/completed` as the terminal notification for a turn's final status; token accounting may continue to arrive on `thread/tokenUsage/updated`.
 - Per-connection opt-outs via `initialize.capabilities.optOutNotificationMethods` can suppress specific methods, so higher-level helpers should tolerate missing event classes when callers opt out.
 
 ## Local Development

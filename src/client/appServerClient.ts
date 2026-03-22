@@ -654,6 +654,10 @@ export class AppServerClient {
    * `turn/started`, each streamed item emits `item/started`, then any
    * item-specific delta/progress notifications, then `item/completed`, and the
    * turn finishes with `turn/completed`.
+   *
+   * Callers can opt out of specific notification methods during initialize, so
+   * helpers built on top of this stream should tolerate missing lifecycle
+   * events when the connection has method-level suppression enabled.
    */
   public onEvent<Method extends AppServerClientEventMethod>(
     method: Method,
