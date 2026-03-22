@@ -17,6 +17,8 @@ Subpath imports are intentionally not part of the public contract.
 - Guide: [Guide](https://brandonmjohnson.github.io/codex-client/guide/)
 - API overview: [API Surface](https://brandonmjohnson.github.io/codex-client/reference/)
 - Client reference: [AppServerClient](https://brandonmjohnson.github.io/codex-client/reference/app-server-client)
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Release process: [RELEASING.md](./RELEASING.md)
 
 ## Status
 
