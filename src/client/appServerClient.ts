@@ -420,6 +420,11 @@ export interface AppServerClientInitializeOptions {
 
 const INTERNAL_RPC_ERROR_CODE = -32603;
 
+type TypedRequestWrapper<Method extends AppServerClientRequestMethod> = {
+  readonly request: AppServerClientInboundRequest<Method>;
+  readonly wasResponded: () => boolean;
+};
+
 export class AppServerClient {
   readonly #session: RpcSession;
 
@@ -598,7 +603,7 @@ export class AppServerClient {
         return;
       }
 
-      listener(this.#toTypedRequest(method, request));
+      listener(this.#createTypedRequestWrapper(method, request).request);
     });
   }
 
@@ -610,21 +615,34 @@ export class AppServerClient {
     method: Method,
     handler: AppServerClientRequestHandler<Method>
   ): () => void {
-    return this.onServerRequest(method, (request) => {
+    return this.#session.onRequest((request) => {
+      if (request.method !== method) {
+        return;
+      }
+
+      const wrapper = this.#createTypedRequestWrapper(method, request);
       let resultPromise: Promise<AppServerClientRequestResponseOf<Method>>;
 
       try {
-        resultPromise = Promise.resolve(handler(request));
+        resultPromise = Promise.resolve(handler(wrapper.request));
       } catch (error) {
         resultPromise = Promise.reject(error);
       }
 
       void resultPromise
         .then(async (result) => {
-          await request.respond(result);
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respond(result);
         })
         .catch(async (error: unknown) => {
-          await request.respondError({
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respondError({
             code: INTERNAL_RPC_ERROR_CODE,
             message: asError(error).message
           });
@@ -709,20 +727,37 @@ export class AppServerClient {
     }
   }
 
-  #toTypedRequest<Method extends AppServerClientRequestMethod>(
+  #createTypedRequestWrapper<Method extends AppServerClientRequestMethod>(
     method: Method,
     request: RpcInboundRequest
-  ): AppServerClientInboundRequest<Method> {
-    return {
-      id: request.id,
-      method,
-      params: request.params as StableServerRequestMap[Method]["params"],
-      respond: async (result) => {
-        await request.respond(result as JsonValue);
-      },
-      respondError: async (error) => {
-        await request.respondError(error);
+  ): TypedRequestWrapper<Method> {
+    let responded = false;
+
+    const assertCanRespond = (): void => {
+      if (responded) {
+        throw new RpcStateError(
+          `Cannot respond to server request "${method}" more than once.`
+        );
       }
+
+      responded = true;
+    };
+
+    return {
+      request: {
+        id: request.id,
+        method,
+        params: request.params as StableServerRequestMap[Method]["params"],
+        respond: async (result) => {
+          assertCanRespond();
+          await request.respond(result as JsonValue);
+        },
+        respondError: async (error) => {
+          assertCanRespond();
+          await request.respondError(error);
+        }
+      },
+      wasResponded: () => responded
     };
   }
 }

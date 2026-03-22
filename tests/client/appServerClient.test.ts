@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AppServerClient,
   type AppServerClientInboundRequest,
+  type ApplyPatchApprovalResponse,
   type AppServerClientNotificationOf,
   type ChatgptAuthTokensRefreshResponse,
   type CancelLoginAccountResponse,
@@ -12,6 +13,7 @@ import {
   type CommandExecTerminateResponse,
   type CommandExecWriteResponse,
   type DynamicToolCallResponse,
+  type ExecCommandApprovalResponse,
   type FileChangeRequestApprovalResponse,
   type FsCopyResponse,
   type FsCreateDirectoryResponse,
@@ -480,6 +482,18 @@ describe("AppServerClient", () => {
     const client = new AppServerClient({ transport });
 
     client.handleRequest(
+      "applyPatchApproval",
+      (): ApplyPatchApprovalResponse => ({
+        decision: "approved"
+      })
+    );
+    client.handleRequest(
+      "execCommandApproval",
+      (): ExecCommandApprovalResponse => ({
+        decision: "approved_for_session"
+      })
+    );
+    client.handleRequest(
       "item/commandExecution/requestApproval",
       async (): Promise<CommandExecutionRequestApprovalResponse> => ({
         decision: "accept"
@@ -548,6 +562,30 @@ describe("AppServerClient", () => {
     await initialize;
     transport.sentMessages.length = 0;
 
+    transport.emitMessage({
+      id: "req-apply-patch",
+      method: "applyPatchApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "patch-1",
+        fileChanges: {},
+        reason: null,
+        grantRoot: null
+      }
+    });
+    transport.emitMessage({
+      id: "req-exec-command",
+      method: "execCommandApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "exec-1",
+        approvalId: null,
+        command: ["echo", "hello"],
+        cwd: "/workspace",
+        reason: null,
+        parsedCmd: []
+      }
+    });
     transport.emitMessage({
       id: "req-approval",
       method: "item/commandExecution/requestApproval",
@@ -634,6 +672,18 @@ describe("AppServerClient", () => {
 
     expect(transport.sentMessages).toEqual([
       {
+        id: "req-apply-patch",
+        result: {
+          decision: "approved"
+        }
+      },
+      {
+        id: "req-exec-command",
+        result: {
+          decision: "approved_for_session"
+        }
+      },
+      {
         id: "req-approval",
         result: {
           decision: "accept"
@@ -689,6 +739,61 @@ describe("AppServerClient", () => {
           accessToken: "token",
           chatgptAccountId: "acct-1",
           chatgptPlanType: "pro"
+        }
+      }
+    ]);
+  });
+
+  it("does not auto-send a second response after a handler replies manually", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    client.handleRequest("item/tool/call", async (request) => {
+      await request.respond({
+        success: true,
+        contentItems: []
+      });
+
+      return {
+        success: false,
+        contentItems: []
+      };
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-tool-manual",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-manual",
+        tool: "echo",
+        arguments: {}
+      }
+    });
+
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-tool-manual",
+        result: {
+          success: true,
+          contentItems: []
         }
       }
     ]);
