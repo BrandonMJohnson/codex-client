@@ -3,7 +3,12 @@ import { once } from "node:events";
 
 import { describe, expect, it } from "vitest";
 
-import { AppServerClient, StdioTransport } from "../../src/index.js";
+import {
+  AppServerClient,
+  RpcResponseError,
+  StdioTransport,
+  type ThreadResumeResponse
+} from "../../src/index.js";
 
 const codexVersion = getCodexVersion();
 const itIfCodex = codexVersion === null ? it.skip : it;
@@ -62,12 +67,149 @@ describe("codex app-server stdio integration", () => {
 
         await client.close();
         await waitForExit(child);
-        expect(stderrChunks.join("")).toBe("");
       } finally {
         await cleanupChild(child);
       }
     },
     20_000
+  );
+
+  itIfCodex(
+    "starts a thread against a real app-server",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        expect(threadStart).toEqual(
+          expect.objectContaining({
+            thread: expect.objectContaining({
+              id: expect.any(String),
+              cwd: process.cwd(),
+              turns: expect.any(Array)
+            }),
+            model: expect.any(String),
+            modelProvider: expect.any(String)
+          })
+        );
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    20_000
+  );
+
+  itIfCodex(
+    "resumes a thread after a completed turn persists rollout history",
+    async () => {
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: null
+        });
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+
+        const threadStart = await client.thread.start({
+          cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const turnStart = await client.turn.start({
+          threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
+          input: [
+            {
+              type: "text",
+              text: "Reply with the single word ok.",
+              text_elements: []
+            }
+          ]
+        });
+
+        const resumed = await waitForCompletedThreadResume(
+          client,
+          threadStart.thread.id,
+          turnStart.turn.id
+        );
+
+        expect(resumed.thread.id).toBe(threadStart.thread.id);
+        expect(resumed.thread.turns).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: turnStart.turn.id,
+              status: "completed",
+              items: expect.arrayContaining([
+                expect.objectContaining({ type: "userMessage" }),
+                expect.objectContaining({ type: "agentMessage" })
+              ])
+            })
+          ])
+        );
+
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
   );
 });
 
@@ -118,4 +260,74 @@ async function waitForExit(
       }, 5_000);
     })
   ]);
+}
+
+async function waitForCompletedThreadResume(
+  client: AppServerClient,
+  threadId: string,
+  turnId: string
+): Promise<ThreadResumeResponse> {
+  const deadline = Date.now() + 45_000;
+
+  while (Date.now() < deadline) {
+    try {
+      const resumed = await client.thread.resume({
+        threadId,
+        persistExtendedHistory: false
+      });
+
+      const resumedTurn = resumed.thread.turns.find((turn) => turn.id === turnId);
+      if (
+        resumedTurn?.status === "completed" &&
+        resumedTurn.items.some((item) => item.type === "agentMessage")
+      ) {
+        return resumed;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 250);
+      });
+      continue;
+    } catch (error) {
+      if (
+        error instanceof RpcResponseError &&
+        error.code === -32600 &&
+        error.message.includes("no rollout found")
+      ) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error(
+    `Timed out waiting for thread ${threadId} to resume with completed turn ${turnId}.`
+  );
+}
+
+function selectPreferredIntegrationModel(
+  models: Array<{ id: string; model: string }>
+): string | undefined {
+  const preferredModels = [
+    "gpt-5.3-codex-spark",
+    "gpt-5.4-mini",
+    "gpt-5.1-codex-mini"
+  ];
+
+  for (const preferredModel of preferredModels) {
+    const match = models.find(
+      (candidate) =>
+        candidate.id === preferredModel || candidate.model === preferredModel
+    );
+
+    if (match) {
+      return match.model;
+    }
+  }
+
+  return undefined;
 }

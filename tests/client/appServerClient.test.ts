@@ -7,6 +7,12 @@ import {
   type InitializeParams,
   type JsonValue,
   type RpcNotificationMessage,
+  type Thread,
+  type ThreadReadResponse,
+  type ThreadResumeResponse,
+  type ThreadStartResponse,
+  type Turn,
+  type TurnStartResponse,
   type Transport,
   type TransportCloseListener,
   type TransportErrorListener,
@@ -296,6 +302,193 @@ describe("AppServerClient", () => {
     expect(requests).toEqual(["item/tool/call"]);
     expect(transport.sentMessages).toEqual([{ id: "req-1", result: null }]);
   });
+
+  it("routes thread namespace helpers to the stable thread RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const threadStart = client.thread.start({
+      cwd: "/workspace",
+      experimentalRawEvents: false,
+      persistExtendedHistory: false
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        cwd: "/workspace",
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createThreadStartResponse(createThread("thread-1")) as JsonValue
+    });
+    await expect(threadStart).resolves.toEqual(
+      createThreadStartResponse(createThread("thread-1"))
+    );
+
+    const threadResume = client.thread.resume({
+      threadId: "thread-1",
+      persistExtendedHistory: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[1]).toEqual({
+      id: 3,
+      method: "thread/resume",
+      params: {
+        threadId: "thread-1",
+        persistExtendedHistory: true
+      }
+    });
+    const resumedThread = createThread("thread-1", {
+      turns: [
+        {
+          id: "turn-1",
+          items: [],
+          status: "completed",
+          error: null
+        }
+      ]
+    });
+    transport.emitMessage({
+      id: 3,
+      result: createThreadResumeResponse(resumedThread) as JsonValue
+    });
+    await expect(threadResume).resolves.toEqual(
+      createThreadResumeResponse(resumedThread)
+    );
+
+    const threadRead = client.thread.read({
+      threadId: "thread-1",
+      includeTurns: true
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[2]).toEqual({
+      id: 4,
+      method: "thread/read",
+      params: {
+        threadId: "thread-1",
+        includeTurns: true
+      }
+    });
+    transport.emitMessage({
+      id: 4,
+      result: createThreadReadResponse(resumedThread) as JsonValue
+    });
+    await expect(threadRead).resolves.toEqual(createThreadReadResponse(resumedThread));
+
+    const threadList = client.thread.list({
+      limit: 10,
+      searchTerm: "demo"
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[3]).toEqual({
+      id: 5,
+      method: "thread/list",
+      params: {
+        limit: 10,
+        searchTerm: "demo"
+      }
+    });
+    transport.emitMessage({
+      id: 5,
+      result: {
+        data: [createThread("thread-1")],
+        nextCursor: "cursor-2"
+      } as JsonValue
+    });
+    await expect(threadList).resolves.toEqual({
+      data: [createThread("thread-1")],
+      nextCursor: "cursor-2"
+    });
+
+    const loadedList = client.thread.loadedList({ limit: 5 });
+    await flushAsyncWork();
+    expect(transport.sentMessages[4]).toEqual({
+      id: 6,
+      method: "thread/loaded/list",
+      params: { limit: 5 }
+    });
+    transport.emitMessage({
+      id: 6,
+      result: {
+        data: ["thread-1"],
+        nextCursor: null
+      }
+    });
+    await expect(loadedList).resolves.toEqual({
+      data: ["thread-1"],
+      nextCursor: null
+    });
+  });
+
+  it("routes turn namespace helpers to the stable turn RPC methods", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const turnStart = client.turn.start({
+      threadId: "thread-1",
+      input: [
+        {
+          type: "text",
+          text: "Say hello",
+          text_elements: []
+        }
+      ]
+    });
+    await flushAsyncWork();
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "turn/start",
+      params: {
+        threadId: "thread-1",
+        input: [
+          {
+            type: "text",
+            text: "Say hello",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    transport.emitMessage({
+      id: 2,
+      result: createTurnStartResponse(createTurn("turn-1", "inProgress")) as JsonValue
+    });
+
+    await expect(turnStart).resolves.toEqual(
+      createTurnStartResponse(createTurn("turn-1", "inProgress"))
+    );
+  });
 });
 
 function createInitializeParams(): InitializeParams {
@@ -312,4 +505,75 @@ function createInitializeParams(): InitializeParams {
 async function flushAsyncWork(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createThreadStartResponse(thread: Thread): ThreadStartResponse {
+  return {
+    thread,
+    model: "gpt-5",
+    modelProvider: "openai",
+    serviceTier: null,
+    cwd: "/workspace",
+    approvalPolicy: "never",
+    approvalsReviewer: "user",
+    sandbox: {
+      type: "dangerFullAccess"
+    },
+    reasoningEffort: null
+  };
+}
+
+function createThreadResumeResponse(thread: Thread): ThreadResumeResponse {
+  return createThreadStartResponse(thread);
+}
+
+function createTurnStartResponse(turn: Turn): TurnStartResponse {
+  return {
+    turn
+  };
+}
+
+function createThreadReadResponse(thread: Thread): ThreadReadResponse {
+  return {
+    thread
+  };
+}
+
+function createTurn(
+  turnId: string,
+  status: Turn["status"],
+  overrides: Partial<Turn> = {}
+): Turn {
+  return {
+    id: turnId,
+    items: [],
+    status,
+    error: null,
+    ...overrides
+  };
+}
+
+function createThread(
+  threadId: string,
+  overrides: Partial<Thread> = {}
+): Thread {
+  return {
+    id: threadId,
+    preview: "Demo thread",
+    ephemeral: false,
+    modelProvider: "openai",
+    createdAt: 1,
+    updatedAt: 2,
+    status: { type: "idle" },
+    path: "/tmp/thread-1.jsonl",
+    cwd: "/workspace",
+    cliVersion: "1.0.0",
+    source: "appServer",
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: "Demo thread",
+    turns: [],
+    ...overrides
+  };
 }

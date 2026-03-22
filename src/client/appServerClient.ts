@@ -16,7 +16,21 @@ import type {
   ModelListResponse,
   SkillsListEntry,
   SkillsListParams,
-  SkillsListResponse
+  SkillsListResponse,
+  Thread,
+  ThreadListParams,
+  ThreadListResponse,
+  ThreadLoadedListParams,
+  ThreadLoadedListResponse,
+  ThreadReadParams,
+  ThreadReadResponse,
+  ThreadResumeParams,
+  ThreadResumeResponse,
+  Turn,
+  ThreadStartParams,
+  ThreadStartResponse,
+  TurnStartParams,
+  TurnStartResponse
 } from "../protocol/index.js";
 import type { JsonValue, Transport, TransportState } from "../transport/transport.js";
 
@@ -33,11 +47,63 @@ type StableClientRequestMap = {
     readonly params: SkillsListParams;
     readonly response: SkillsListResponse;
   };
+  readonly "thread/list": {
+    readonly params: ThreadListParams;
+    readonly response: ThreadListResponse;
+  };
+  readonly "thread/loaded/list": {
+    readonly params: ThreadLoadedListParams;
+    readonly response: ThreadLoadedListResponse;
+  };
+  readonly "thread/read": {
+    readonly params: ThreadReadParams;
+    readonly response: ThreadReadResponse;
+  };
+  readonly "thread/resume": {
+    readonly params: ThreadResumeParams;
+    readonly response: ThreadResumeResponse;
+  };
+  readonly "thread/start": {
+    readonly params: ThreadStartParams;
+    readonly response: ThreadStartResponse;
+  };
+  readonly "turn/start": {
+    readonly params: TurnStartParams;
+    readonly response: TurnStartResponse;
+  };
 };
 
 export type AppServerClientModel = Model;
 export type AppServerClientSkill = SkillsListEntry;
 export type AppServerClientApp = AppInfo;
+export type AppServerClientThread = Thread;
+export type AppServerClientTurn = Turn;
+
+export interface AppServerClientThreadApi {
+  start(params: ThreadStartParams): Promise<ThreadStartResponse>;
+  /**
+   * Resume reloads an existing thread from persisted rollout history. The
+   * server may reject ids for freshly started threads that have not produced a
+   * resumable rollout yet, so callers should treat thread ids as resumable only
+   * after the backing session has been materialized by the server.
+   */
+  resume(params: ThreadResumeParams): Promise<ThreadResumeResponse>;
+  read(params: ThreadReadParams): Promise<ThreadReadResponse>;
+  list(params?: ThreadListParams): Promise<ThreadListResponse>;
+  loadedList(
+    params?: ThreadLoadedListParams
+  ): Promise<ThreadLoadedListResponse>;
+}
+
+export interface AppServerClientTurnApi {
+  /**
+   * Start a new turn on an existing thread. The server streams the turn's
+   * progress via notifications and sends the final state separately, so callers
+   * should usually pair this with notification handling when they need to wait
+   * for completion.
+   */
+  start(params: TurnStartParams): Promise<TurnStartResponse>;
+}
 
 export interface AppServerClientOptions {
   readonly transport: Transport;
@@ -60,8 +126,24 @@ export class AppServerClient {
   #initializeResponse: InitializeResponse | undefined;
   #initializedPromise: Promise<void> | undefined;
 
+  public readonly thread: AppServerClientThreadApi;
+  public readonly turn: AppServerClientTurnApi;
+
   public constructor(options: AppServerClientOptions) {
     this.#session = new RpcSession(options);
+    // Bind namespace helpers once so callers can safely pass them around
+    // without losing the client instance that owns the underlying session.
+    this.thread = {
+      start: async (params) => await this.#request("thread/start", params),
+      resume: async (params) => await this.#request("thread/resume", params),
+      read: async (params) => await this.#request("thread/read", params),
+      list: async (params = {}) => await this.#request("thread/list", params),
+      loadedList: async (params = {}) =>
+        await this.#request("thread/loaded/list", params)
+    };
+    this.turn = {
+      start: async (params) => await this.#request("turn/start", params)
+    };
   }
 
   public get state(): TransportState {
