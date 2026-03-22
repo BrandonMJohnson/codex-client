@@ -3,7 +3,12 @@ import { once } from "node:events";
 
 import { describe, expect, it } from "vitest";
 
-import { AppServerClient, StdioTransport } from "../../src/index.js";
+import {
+  AppServerClient,
+  RpcResponseError,
+  StdioTransport,
+  type ThreadResumeResponse
+} from "../../src/index.js";
 
 const codexVersion = getCodexVersion();
 const itIfCodex = codexVersion === null ? it.skip : it;
@@ -133,6 +138,12 @@ describe("codex app-server stdio integration", () => {
         cwd: process.cwd(),
         stdio: ["pipe", "pipe", "pipe"]
       });
+      const stderrChunks: string[] = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
 
       const transport = new StdioTransport({
         input: child.stdout,
@@ -149,34 +160,34 @@ describe("codex app-server stdio integration", () => {
           },
           capabilities: null
         });
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
 
         const threadStart = await client.thread.start({
           cwd: process.cwd(),
+          ...(preferredModel ? { model: preferredModel } : {}),
           experimentalRawEvents: false,
           persistExtendedHistory: false
         });
 
         const turnStart = await client.turn.start({
           threadId: threadStart.thread.id,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          effort: "low",
           input: [
             {
               type: "text",
-              text: "Reply with exactly OK and nothing else.",
+              text: "Reply with the single word ok.",
               text_elements: []
             }
           ]
         });
 
-        await waitForTurnCompleted(
+        const resumed = await waitForCompletedThreadResume(
           client,
           threadStart.thread.id,
           turnStart.turn.id
         );
-
-        const resumed = await client.thread.resume({
-          threadId: threadStart.thread.id,
-          persistExtendedHistory: false
-        });
 
         expect(resumed.thread.id).toBe(threadStart.thread.id);
         expect(resumed.thread.turns).toEqual(
@@ -198,7 +209,7 @@ describe("codex app-server stdio integration", () => {
         await cleanupChild(child);
       }
     },
-    30_000
+    60_000
   );
 });
 
@@ -251,58 +262,72 @@ async function waitForExit(
   ]);
 }
 
-async function waitForTurnCompleted(
+async function waitForCompletedThreadResume(
   client: AppServerClient,
   threadId: string,
   turnId: string
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      unsubscribeNotification();
-      unsubscribeClose();
-      reject(new Error(`Timed out waiting for turn ${turnId} to complete.`));
-    }, 20_000);
+): Promise<ThreadResumeResponse> {
+  const deadline = Date.now() + 45_000;
 
-    const unsubscribeNotification = client.onNotification((notification) => {
-      if (notification.method !== "turn/completed") {
-        return;
+  while (Date.now() < deadline) {
+    try {
+      const resumed = await client.thread.resume({
+        threadId,
+        persistExtendedHistory: false
+      });
+
+      const resumedTurn = resumed.thread.turns.find((turn) => turn.id === turnId);
+      if (
+        resumedTurn?.status === "completed" &&
+        resumedTurn.items.some((item) => item.type === "agentMessage")
+      ) {
+        return resumed;
       }
 
-      if (!isTurnCompletedNotification(notification.params, threadId, turnId)) {
-        return;
+      await new Promise((resolve) => {
+        setTimeout(resolve, 250);
+      });
+      continue;
+    } catch (error) {
+      if (
+        error instanceof RpcResponseError &&
+        error.code === -32600 &&
+        error.message.includes("no rollout found")
+      ) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
+        continue;
       }
 
-      clearTimeout(timeout);
-      unsubscribeNotification();
-      unsubscribeClose();
-      resolve();
-    });
-
-    const unsubscribeClose = client.onClose((error) => {
-      clearTimeout(timeout);
-      unsubscribeNotification();
-      unsubscribeClose();
-      reject(error ?? new Error("Client closed before the turn completed."));
-    });
-  });
-}
-
-function isTurnCompletedNotification(
-  params: unknown,
-  threadId: string,
-  turnId: string
-): params is {
-  threadId: string;
-  turn: { id: string };
-} {
-  if (typeof params !== "object" || params === null) {
-    return false;
+      throw error;
+    }
   }
 
-  const candidate = params as {
-    threadId?: unknown;
-    turn?: { id?: unknown };
-  };
+  throw new Error(
+    `Timed out waiting for thread ${threadId} to resume with completed turn ${turnId}.`
+  );
+}
 
-  return candidate.threadId === threadId && candidate.turn?.id === turnId;
+function selectPreferredIntegrationModel(
+  models: Array<{ id: string; model: string }>
+): string | undefined {
+  const preferredModels = [
+    "gpt-5.3-codex-spark",
+    "gpt-5.4-mini",
+    "gpt-5.1-codex-mini"
+  ];
+
+  for (const preferredModel of preferredModels) {
+    const match = models.find(
+      (candidate) =>
+        candidate.id === preferredModel || candidate.model === preferredModel
+    );
+
+    if (match) {
+      return match.model;
+    }
+  }
+
+  return undefined;
 }
