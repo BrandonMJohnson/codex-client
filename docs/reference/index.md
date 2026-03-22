@@ -1,6 +1,6 @@
 # API Surface
 
-The package exposes four layers from the top-level entrypoint so you can choose the level of abstraction that fits your application.
+The package exposes a single supported public entrypoint at the root import. That entrypoint re-exports four layers so you can choose the level of abstraction that fits your application.
 
 ## `AppServerClient`
 
@@ -28,7 +28,9 @@ The layer between transport and `AppServerClient`. It tracks request ids, correl
 
 ## Protocol Exports
 
-Curated protocol types are re-exported from the package entrypoint so applications can stay aligned with the generated schemas without importing from `src/generated/` directly.
+Curated protocol types are re-exported from the root package entrypoint so applications can stay aligned with the generated schemas without importing from `src/generated/` directly.
+
+Subpath imports are intentionally unsupported.
 
 For the detailed source of truth on protocol behavior, see:
 
