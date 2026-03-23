@@ -41,5 +41,5 @@ jobs:
       - name: Build docs
         run: npm run docs:build
 
-      - name: Run unit tests
+      - name: Run default test suite
         run: npm test

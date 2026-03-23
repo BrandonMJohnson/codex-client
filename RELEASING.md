@@ -25,9 +25,11 @@ That command runs the same checks we expect from a release candidate:
 - package-surface smoke checks
 - docs site build
 
-The full test suite is already covered by the normal CI workflow, so release
+The normal CI workflow already covers the default test suite, so release
 validation focuses on the packaging and documentation surfaces that are easy to
-drift while preparing a tag.
+drift while preparing a tag. The live app-server integration suite remains
+available through `npm run test:integration` when you want intentional
+end-to-end coverage against a real `codex app-server`.
 
 The release validation command expects the `codex` CLI to be available locally
 so the bindings check can compare against the generator version recorded in
@@ -63,8 +65,8 @@ CI-backed release candidate check before tagging.
 The repository also includes a publish workflow,
 [`.github/workflows/publish.yml`](./.github/workflows/publish.yml), that is
 wired for GitHub trusted publishing. It runs when a version tag like `v0.1.0`
-is pushed. The workflow runs the default test suite before installing the
-`codex` CLI so publish jobs stay aligned with the normal CI surface instead of
-turning on the live integration suite as a side effect of release tooling. If a
+is pushed. The workflow runs the default test suite and release validation
+before publishing. The live integration suite stays on the separate
+`npm run test:integration` path for intentional end-to-end coverage. If a
 tagged publish run needs to be retried, re-run that workflow for the same tag
 instead of dispatching a fresh publish from an arbitrary ref.

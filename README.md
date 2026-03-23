@@ -55,3 +55,10 @@ npm run build
 npm test
 npm run docs:build
 ```
+
+When you want to exercise the real app-server flow locally, run the live
+integration suite separately:
+
+```bash
+npm run test:integration
+```

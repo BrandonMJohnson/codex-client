@@ -29,9 +29,11 @@
     "release:check": "npm run bindings:check && npm run typecheck && npm run build && npm run package:check && npm run docs:build",
     "package:check": "node scripts/check-package.mjs",
     "prepare": "npm run build",
-    "test": "vitest run",
+    "test": "npm run test:unit",
+    "test:all": "npm test && npm run test:integration",
+    "test:unit": "vitest run tests/client tests/rpc tests/scripts tests/transport",
     "test:integration": "node scripts/runIntegrationTests.mjs",
-    "test:watch": "vitest",
+    "test:watch": "vitest tests/client tests/rpc tests/scripts tests/transport",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": [

@@ -7,6 +7,7 @@
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
 - [ ] `npm test`
+- [ ] `npm run test:integration` when the change needs real app-server coverage
 - [ ] `npm run docs:build` when docs changed or when user-facing workflows/API docs may have drifted
 - [ ] `npm run bindings:check` when generated bindings or generation scripts changed
 
