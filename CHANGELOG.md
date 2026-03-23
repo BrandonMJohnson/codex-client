@@ -10,5 +10,11 @@ The repository follows a lightweight Keep a Changelog style:
 
 ## Unreleased
 
-Add short bullet points here before each release. The first published release will
-be carved out of this section as part of the release commit before the tag is cut.
+Add short bullet points here before each release.
+
+## 0.1.1 - 2026-03-22
+
+- Added a tag-driven `publish.yml` GitHub Actions workflow for npm trusted publishing.
+- Updated the release guide to document the trusted-publishing flow and tag-based publish trigger.
+- Updated install docs to point consumers at `npm install codex-app-server-client`.
+- Synced the implementation plan with the standardized npm, `tsc`, and Node `24+` ESM-only release posture.
