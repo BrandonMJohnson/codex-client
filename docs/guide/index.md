@@ -31,7 +31,7 @@ codex app-server --listen stdio://
 
 ## Install
 
-The package is not published to npm yet, so current consumption is from a git checkout or a local path.
+The package is published on npm, so current consumption is from npm or from a local checkout while developing on this repository.
 
 For local development in this repository:
 
@@ -39,14 +39,10 @@ For local development in this repository:
 npm ci
 ```
 
-For use from another project before the first npm release:
+For use from another project:
 
 ```bash
-cd /path/to/codex-client
-npm ci
-
-cd /path/to/your-project
-npm install /path/to/codex-client
+npm install codex-app-server-client
 ```
 
 The package runs `prepare` during install, so the built `dist/` output is generated automatically once the checkout has its toolchain installed.
