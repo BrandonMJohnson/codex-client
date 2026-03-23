@@ -12,6 +12,11 @@ The repository follows a lightweight Keep a Changelog style:
 
 Add short bullet points here before each release.
 
+## 0.1.3 - 2026-03-22
+
+- Added explicit repository metadata to `package.json` so npm can verify GitHub trusted-publishing provenance against `https://github.com/BrandonMJohnson/codex-client`.
+- Kept the release surface otherwise unchanged while retrying the failed provenance-backed publish path.
+
 ## 0.1.2 - 2026-03-22
 
 - Split the default `npm test` suite from the live app-server integration suite so trusted-publishing and normal CI runs stay on the non-live test surface.
