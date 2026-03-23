@@ -32,6 +32,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Run default test suite
+        run: npm test
+
       - name: Read codex generator version
         id: codex-version
         run: |
@@ -44,9 +47,6 @@ jobs:
 
       - name: Run release validation
         run: npm run release:check
-
-      - name: Run test suite
-        run: npm test
 
       - name: Publish package
         run: npm publish --access public

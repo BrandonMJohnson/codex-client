@@ -63,5 +63,8 @@ CI-backed release candidate check before tagging.
 The repository also includes a publish workflow,
 [`.github/workflows/publish.yml`](./.github/workflows/publish.yml), that is
 wired for GitHub trusted publishing. It runs when a version tag like `v0.1.0`
-is pushed. If a tagged publish run needs to be retried, re-run that workflow for
-the same tag instead of dispatching a fresh publish from an arbitrary ref.
+is pushed. The workflow runs the default test suite before installing the
+`codex` CLI so publish jobs stay aligned with the normal CI surface instead of
+turning on the live integration suite as a side effect of release tooling. If a
+tagged publish run needs to be retried, re-run that workflow for the same tag
+instead of dispatching a fresh publish from an arbitrary ref.
