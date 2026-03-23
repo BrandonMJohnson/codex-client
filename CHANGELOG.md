@@ -12,6 +12,12 @@ The repository follows a lightweight Keep a Changelog style:
 
 Add short bullet points here before each release.
 
+## 0.1.2 - 2026-03-22
+
+- Split the default `npm test` suite from the live app-server integration suite so trusted-publishing and normal CI runs stay on the non-live test surface.
+- Kept real app-server coverage available explicitly through `npm run test:integration`.
+- Updated release and contributor docs to reflect the separated default and integration test paths.
+
 ## 0.1.1 - 2026-03-22
 
 - Added a tag-driven `publish.yml` GitHub Actions workflow for npm trusted publishing.
