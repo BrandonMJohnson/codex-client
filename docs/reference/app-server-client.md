@@ -4,7 +4,22 @@
 
 ## Construct A Client
 
-Most applications create a client from `StdioTransport`:
+Most applications can start with `createClient()`:
+
+```ts
+import { createClient } from "codex-app-server-client";
+
+const client = await createClient();
+```
+
+That factory:
+
+- spawns a local `codex app-server --listen stdio://`
+- uses `process.cwd()` by default
+- completes `initialize` -> `initialized`
+- returns a managed client whose `close()` also shuts down the child process
+
+When you need transport-level control, the lower-level path is still available:
 
 ```ts
 import { spawn } from "node:child_process";
@@ -64,6 +79,8 @@ await client.start();
 ### `client.initialize(params, options?)`
 
 Sends `initialize`, caches the response, and by default follows it with `initialized`.
+
+Clients returned by `createClient()` have already completed this handshake.
 
 ```ts
 await client.initialize({
@@ -185,14 +202,12 @@ Thread helpers cover thread creation, inspection, resumption, and the combined t
 Starts a new thread.
 
 ```ts
-const startedThread = await client.thread.start({
-  cwd: process.cwd(),
-  experimentalRawEvents: false,
-  persistExtendedHistory: false
-});
+const startedThread = await client.thread.start();
 
 console.log(startedThread.thread.id);
 ```
+
+When you omit `experimentalRawEvents` or `persistExtendedHistory`, the client defaults both to `false`.
 
 ### `client.thread.resume(params, options?)`
 
@@ -244,11 +259,6 @@ Starts a thread and immediately runs its first turn.
 
 ```ts
 const run = await client.thread.run({
-  thread: {
-    cwd: process.cwd(),
-    experimentalRawEvents: false,
-    persistExtendedHistory: false
-  },
   turn: {
     effort: "low",
     input: [

@@ -49,9 +49,23 @@ The package runs `prepare` during install, so the built `dist/` output is genera
 
 Only the root package import is supported. Deep imports and subpath imports are intentionally not part of the public API, and CommonJS `require()` is not a supported consumption mode.
 
-## Start The App-Server
+## Create A Ready Client
 
-The usual setup is to spawn `codex app-server` as a child process and connect the client to its stdio streams.
+The simplest local setup is to let the package start and initialize a local app-server for you.
+
+```ts
+import { createClient } from "codex-app-server-client";
+
+const client = await createClient();
+```
+
+`createClient()` uses the current working directory by default, spawns `codex app-server --listen stdio://`, completes the required handshake, and returns a ready client.
+
+If you need explicit process or transport control, the lower-level construction path is still available.
+
+## Start The App-Server Manually
+
+The manual setup is still available when you want to own process startup or the transport boundary explicitly.
 
 ```ts
 import { spawn } from "node:child_process";
@@ -71,8 +85,6 @@ const transport = new StdioTransport({
 const client = new AppServerClient({ transport });
 ```
 
-This keeps the transport boundary explicit and makes it easy to drop to lower-level APIs later if you need raw protocol access.
-
 ## Initialize A Client
 
 Every connection must perform the protocol handshake in this order:
@@ -80,7 +92,7 @@ Every connection must perform the protocol handshake in this order:
 1. `initialize`
 2. `initialized`
 
-`client.initialize()` handles both steps by default.
+Clients created through `createClient()` are already initialized. If you construct a client manually, `client.initialize()` handles both steps by default.
 
 ```ts
 await client.initialize({
@@ -110,11 +122,7 @@ The turn and thread APIs include both direct request helpers and higher-level co
 ### Start A Thread
 
 ```ts
-const thread = await client.thread.start({
-  cwd: process.cwd(),
-  experimentalRawEvents: false,
-  persistExtendedHistory: false
-});
+const thread = await client.thread.start();
 
 console.log(thread.thread.id);
 ```
@@ -149,11 +157,6 @@ console.log(agentMessage?.type);
 
 ```ts
 const run = await client.thread.run({
-  thread: {
-    cwd: process.cwd(),
-    experimentalRawEvents: false,
-    persistExtendedHistory: false
-  },
   turn: {
     effort: "low",
     input: [

@@ -1139,9 +1139,7 @@ describe("AppServerClient", () => {
     transport.sentMessages.length = 0;
 
     const threadStart = client.thread.start({
-      cwd: "/workspace",
-      experimentalRawEvents: false,
-      persistExtendedHistory: false
+      cwd: "/workspace"
     });
     await flushAsyncWork();
     expect(transport.sentMessages[0]).toEqual({
@@ -1343,9 +1341,7 @@ describe("AppServerClient", () => {
     const run = client.thread.run(
       {
         thread: {
-          cwd: "/workspace",
-          experimentalRawEvents: false,
-          persistExtendedHistory: false
+          cwd: "/workspace"
         },
         turn: {
           input: [
@@ -1467,9 +1463,7 @@ describe("AppServerClient", () => {
 
     const run = client.thread.run({
       thread: {
-        cwd: "/workspace",
-        experimentalRawEvents: false,
-        persistExtendedHistory: false
+        cwd: "/workspace"
       },
       turn: {
         input: [
@@ -1528,6 +1522,46 @@ describe("AppServerClient", () => {
       expect(error.cause.message).toBe("turn failed");
       expect(error.cause.code).toBe(-32000);
     }
+  });
+
+  it("defaults thread.run to a plain thread/start when no thread options are supplied", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    void client.thread.run({
+      turn: {
+        input: [
+          {
+            type: "text",
+            text: "Run with default thread options.",
+            text_elements: []
+          }
+        ]
+      }
+    });
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
   });
 
   it("routes turn namespace helpers to the stable turn RPC methods", async () => {
