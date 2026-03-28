@@ -1,9 +1,9 @@
 import type { RpcRequestOptions } from "../rpc/index.js";
 import type {
-  ThreadStartParams,
   ThreadStartResponse,
   TurnStartParams
 } from "../protocol/index.js";
+import type { AppServerClientThreadStartOptions } from "./threadStartOptions.js";
 import type {
   AppServerClientTurnRunOptions,
   AppServerClientTurnRunResult
@@ -13,7 +13,7 @@ export interface AppServerClientThreadRunParams {
   /**
    * Parameters forwarded to `thread/start`.
    */
-  readonly thread: ThreadStartParams;
+  readonly thread?: AppServerClientThreadStartOptions;
   /**
    * Parameters forwarded to the initial `turn/start` after the thread id is
    * known. The helper fills `threadId` from the thread-start response so the
@@ -61,7 +61,7 @@ export class AppServerClientThreadRunError extends Error {
 export interface ThreadRunEventSource {
   readonly thread: {
     start(
-      params: ThreadStartParams,
+      params?: AppServerClientThreadStartOptions,
       options?: RpcRequestOptions
     ): Promise<ThreadStartResponse>;
   };

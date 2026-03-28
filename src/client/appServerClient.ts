@@ -19,6 +19,10 @@ import {
   type AppServerClientThreadRunResult
 } from "./threadRun.js";
 import {
+  normalizeThreadStartParams,
+  type AppServerClientThreadStartOptions
+} from "./threadStartOptions.js";
+import {
   APPROVAL_REQUEST_METHODS,
   type AppServerClientApprovalHandlers,
   type AppServerClientApprovalRequestMethod,
@@ -350,7 +354,7 @@ export interface AppServerClientThreadApi {
     options?: AppServerClientThreadRunOptions
   ): Promise<AppServerClientThreadRunResult>;
   start(
-    params: ThreadStartParams,
+    params?: AppServerClientThreadStartOptions,
     options?: AppServerClientRequestOptions
   ): Promise<ThreadStartResponse>;
   /**
@@ -554,7 +558,11 @@ export class AppServerClient {
     // without losing the client instance that owns the underlying session.
     this.thread = {
       start: async (params, options) =>
-        await this.#request("thread/start", params, options),
+        await this.#request(
+          "thread/start",
+          normalizeThreadStartParams(params),
+          options
+        ),
       resume: async (params, options) =>
         await this.#request("thread/resume", params, options),
       read: async (params, options) =>

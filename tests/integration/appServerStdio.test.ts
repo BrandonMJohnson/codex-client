@@ -11,6 +11,7 @@ import {
   type AppServerClientApprovalRequestMethod,
   RpcResponseError,
   StdioTransport,
+  createClient,
   type AppServerClientNotificationOf,
   type RpcNotificationMessage,
   type ThreadResumeResponse
@@ -42,6 +43,35 @@ type StreamedTurnNotification =
   | AppServerClientNotificationOf<"turn/completed">;
 
 describe("codex app-server stdio integration", () => {
+  itIfCodex(
+    "creates a ready-to-use managed client with default local startup behavior",
+    async () => {
+      const client = await createClient({
+        clientInfo: {
+          version: codexVersion ?? "unknown"
+        }
+      });
+
+      try {
+        const modelList = await client.modelList();
+        expect(modelList).toEqual(
+          expect.objectContaining({
+            data: expect.arrayContaining([
+              expect.objectContaining({
+                id: expect.any(String),
+                model: expect.any(String),
+                displayName: expect.any(String)
+              })
+            ])
+          })
+        );
+      } finally {
+        await client.close();
+      }
+    },
+    20_000
+  );
+
   itIfCodex(
     "completes initialize and model/list against a real app-server",
     async () => {

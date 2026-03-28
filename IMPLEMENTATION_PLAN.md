@@ -23,6 +23,13 @@ The protocol details in this plan are derived from that README, including:
 
 ## Progress Notes
 
+### 2026-03-27
+
+- Added a zero-config `createClient()` factory that spawns a local `codex app-server`, completes the initialize handshake automatically, and returns a managed client whose `close()` tears down the child process.
+- Kept the lower-level `AppServerClient` + `Transport` construction path intact so existing protocol-oriented consumers remain supported while the common local path becomes much easier to adopt.
+- Defaulted the ergonomic `thread.start()` and `thread.run()` helpers to `experimentalRawEvents: false` and `persistExtendedHistory: false` so callers no longer need to thread those protocol booleans through routine startup flows.
+- Added focused unit coverage for the managed local-client factory and the new thread helper defaults, plus a live integration test for `createClient()` against a real `codex app-server`.
+
 ### 2026-03-22
 
 - Confirmed the package is now published on npm and added the trusted-publishing GitHub workflow so future releases can flow through `publish.yml` instead of manual token-based publishing.

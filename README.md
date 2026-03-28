@@ -9,6 +9,8 @@ The package exposes a single supported public entrypoint: the root package impor
 - `protocol/` for curated generated protocol bindings
 - `client/` for ergonomic APIs like `thread.start()`, `turn.run()`, and approval handling
 
+For the common local case, the package also exposes a zero-config `createClient()` factory that starts a local app-server, completes `initialize` -> `initialized`, and returns a ready-to-use client.
+
 Subpath imports are intentionally not part of the public contract.
 
 ## Documentation
