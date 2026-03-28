@@ -12,6 +12,14 @@ The repository follows a lightweight Keep a Changelog style:
 
 Add short bullet points here before each release.
 
+## 0.1.4 - 2026-03-27
+
+- Added a zero-config `createClient()` factory that starts a local `codex app-server`, completes the required initialize handshake automatically, and returns a ready-to-use managed client.
+- Kept the lower-level `AppServerClient` plus transport-oriented construction path intact while making the common local startup flow much simpler.
+- Defaulted the ergonomic `thread.start()` and `thread.run()` helpers to use `experimentalRawEvents: false` and `persistExtendedHistory: false` unless callers opt in explicitly.
+- Hardened managed-client startup and shutdown handling for child-process failures and cleanup escalation paths.
+- Updated the guide, API reference, README, and implementation plan to document the new simple path alongside the unchanged advanced path.
+
 ## 0.1.3 - 2026-03-22
 
 - Added explicit repository metadata to `package.json` so npm can verify GitHub trusted-publishing provenance against `https://github.com/BrandonMJohnson/codex-client`.
