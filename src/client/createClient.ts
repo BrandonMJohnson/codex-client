@@ -135,9 +135,16 @@ export class ManagedAppServerClient extends AppServerClient {
 export async function createClient(
   options: CreateClientOptions = {}
 ): Promise<ManagedAppServerClient> {
+  const closeTimeoutMs = normalizeCloseTimeoutMs(options.closeTimeoutMs);
   const child = spawnManagedAppServer(options);
+  await waitForProcessSpawn(child.process).catch(async (error: unknown) => {
+    child.detachStderr?.();
+    await ensureChildProcessExited(child.process, closeTimeoutMs).catch(() => {});
+    throw error;
+  });
+
   const client = new ManagedAppServerClient(child.process, {
-    closeTimeoutMs: normalizeCloseTimeoutMs(options.closeTimeoutMs),
+    closeTimeoutMs,
     ...(options.defaultRequestTimeoutMs === undefined
       ? {}
       : { defaultRequestTimeoutMs: options.defaultRequestTimeoutMs }),
@@ -242,6 +249,32 @@ async function ensureChildProcessExited(
   }
 
   await once(child, "exit");
+}
+
+async function waitForProcessSpawn(
+  child: ManagedAppServerProcess
+): Promise<void> {
+  if (child.pid !== undefined) {
+    return;
+  }
+
+  return await new Promise<void>((resolve, reject) => {
+    const onSpawn = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = (): void => {
+      child.off("spawn", onSpawn);
+      child.off("error", onError);
+    };
+
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
 }
 
 async function waitForProcessExit(

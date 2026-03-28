@@ -1,3 +1,7 @@
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
@@ -35,6 +39,44 @@ describe("createClient", () => {
     }
 
     expect(client.process.exitCode).toBe(0);
+  });
+
+  it("rejects startup failures from the child process instead of surfacing an unhandled error", async () => {
+    await expect(
+      createClient({
+        command: process.execPath,
+        cwd: join(
+          tmpdir(),
+          `codex-client-missing-cwd-${process.pid}-${Date.now()}`
+        ),
+        stderr: new PassThrough()
+      })
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("validates closeTimeoutMs before spawning the managed child process", async () => {
+    const markerPath = join(
+      tmpdir(),
+      `codex-client-create-marker-${process.pid}-${Date.now()}`
+    );
+
+    try {
+      await expect(
+        createClient({
+          command: process.execPath,
+          args: [
+            "-e",
+            `require("node:fs").writeFileSync(${JSON.stringify(markerPath)}, "spawned")`
+          ],
+          closeTimeoutMs: -1,
+          stderr: new PassThrough()
+        })
+      ).rejects.toBeInstanceOf(RangeError);
+
+      expect(existsSync(markerPath)).toBe(false);
+    } finally {
+      await rm(markerPath, { force: true });
+    }
   });
 });
 
