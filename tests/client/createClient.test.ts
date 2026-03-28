@@ -78,6 +78,33 @@ describe("createClient", () => {
       await rm(markerPath, { force: true });
     }
   });
+
+  it("rejects when the child exits before completing initialize", async () => {
+    await expect(
+      createClient({
+        command: process.execPath,
+        args: ["-e", "setImmediate(() => process.exit(17));"],
+        stderr: new PassThrough(),
+        closeTimeoutMs: 25
+      })
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("escalates to signals when the managed child ignores stdin close", async () => {
+    const client = await createClient({
+      command: process.execPath,
+      args: ["-e", createHungShutdownServerScript()],
+      clientInfo: {
+        version: "test-version"
+      },
+      closeTimeoutMs: 10,
+      stderr: new PassThrough()
+    });
+
+    await client.close();
+
+    expect(client.process.signalCode).toBe("SIGKILL");
+  });
 });
 
 function createFakeAppServerScript(): string {
@@ -128,5 +155,41 @@ function createFakeAppServerScript(): string {
     process.stdin.on("end", () => {
       process.exit(0);
     });
+  `;
+}
+
+function createHungShutdownServerScript(): string {
+  return `
+    const readline = require("node:readline");
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      crlfDelay: Infinity
+    });
+
+    function send(message) {
+      process.stdout.write(JSON.stringify(message) + "\\n");
+    }
+
+    rl.on("line", (line) => {
+      const message = JSON.parse(line);
+
+      if (message.method === "initialize") {
+        send({
+          id: message.id,
+          result: {
+            userAgent: "test-codex",
+            platformFamily: "unix",
+            platformOs: "linux"
+          }
+        });
+      }
+    });
+
+    process.stdin.on("end", () => {
+      setInterval(() => {}, 1_000);
+    });
+
+    process.on("SIGTERM", () => {});
   `;
 }

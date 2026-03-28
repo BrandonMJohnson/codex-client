@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AppServerClient,
   type AppServerClientApprovalRequestMethod,
+  type AppServerClientThreadStartOptions,
   AppServerClientThreadRunError,
   type AppServerClientInboundRequest,
   type AppServerClientNotificationOf,
@@ -1558,6 +1559,43 @@ describe("AppServerClient", () => {
       id: 2,
       method: "thread/start",
       params: {
+        experimentalRawEvents: false,
+        persistExtendedHistory: false
+      }
+    });
+  });
+
+  it("keeps thread-start defaults even when JS callers pass undefined overrides", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    const params = {
+      cwd: "/workspace",
+      experimentalRawEvents: undefined,
+      persistExtendedHistory: undefined
+    } as unknown as AppServerClientThreadStartOptions;
+
+    void client.thread.start(params);
+    await flushAsyncWork();
+
+    expect(transport.sentMessages[0]).toEqual({
+      id: 2,
+      method: "thread/start",
+      params: {
+        cwd: "/workspace",
         experimentalRawEvents: false,
         persistExtendedHistory: false
       }

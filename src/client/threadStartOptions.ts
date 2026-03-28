@@ -20,9 +20,15 @@ export interface AppServerClientThreadStartOptions
 export function normalizeThreadStartParams(
   params: AppServerClientThreadStartOptions = {}
 ): ThreadStartParams {
+  const {
+    experimentalRawEvents = false,
+    persistExtendedHistory = false,
+    ...rest
+  } = params;
+
   return {
-    experimentalRawEvents: false,
-    persistExtendedHistory: false,
-    ...params
+    ...rest,
+    experimentalRawEvents,
+    persistExtendedHistory
   };
 }
