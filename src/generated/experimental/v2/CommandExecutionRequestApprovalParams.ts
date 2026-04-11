@@ -4,12 +4,11 @@
 import type { AdditionalPermissionProfile } from "./AdditionalPermissionProfile.js";
 import type { CommandAction } from "./CommandAction.js";
 import type { CommandExecutionApprovalDecision } from "./CommandExecutionApprovalDecision.js";
-import type { CommandExecutionRequestApprovalSkillMetadata } from "./CommandExecutionRequestApprovalSkillMetadata.js";
 import type { ExecPolicyAmendment } from "./ExecPolicyAmendment.js";
 import type { NetworkApprovalContext } from "./NetworkApprovalContext.js";
 import type { NetworkPolicyAmendment } from "./NetworkPolicyAmendment.js";
 
-export type CommandExecutionRequestApprovalParams = { threadId: string, turnId: string, itemId: string, 
+export type CommandExecutionRequestApprovalParams = { threadId: string, turnId: string, itemId: string,
 /**
  * Unique identifier for this specific approval callback.
  *
@@ -19,43 +18,39 @@ export type CommandExecutionRequestApprovalParams = { threadId: string, turnId: 
  * one parent `itemId`, so `approvalId` is a distinct opaque callback id
  * (a UUID) used to disambiguate routing.
  */
-approvalId?: string | null, 
+approvalId?: string | null,
 /**
  * Optional explanatory reason (e.g. request for network access).
  */
-reason?: string | null, 
+reason?: string | null,
 /**
  * Optional context for a managed-network approval prompt.
  */
-networkApprovalContext?: NetworkApprovalContext | null, 
+networkApprovalContext?: NetworkApprovalContext | null,
 /**
  * The command to be executed.
  */
-command?: string | null, 
+command?: string | null,
 /**
  * The command's working directory.
  */
-cwd?: string | null, 
+cwd?: string | null,
 /**
  * Best-effort parsed command actions for friendly display.
  */
-commandActions?: Array<CommandAction> | null, 
+commandActions?: Array<CommandAction> | null,
 /**
  * Optional additional permissions requested for this command.
  */
-additionalPermissions?: AdditionalPermissionProfile | null, 
-/**
- * Optional skill metadata when the approval was triggered by a skill script.
- */
-skillMetadata?: CommandExecutionRequestApprovalSkillMetadata | null, 
+additionalPermissions?: AdditionalPermissionProfile | null,
 /**
  * Optional proposed execpolicy amendment to allow similar commands without prompting.
  */
-proposedExecpolicyAmendment?: ExecPolicyAmendment | null, 
+proposedExecpolicyAmendment?: ExecPolicyAmendment | null,
 /**
  * Optional proposed network policy amendments (allow/deny host) for future requests.
  */
-proposedNetworkPolicyAmendments?: Array<NetworkPolicyAmendment> | null, 
+proposedNetworkPolicyAmendments?: Array<NetworkPolicyAmendment> | null,
 /**
  * Ordered list of decisions the client may present for this prompt.
  */

@@ -139,6 +139,9 @@
       "title": "AgentMessageDeltaNotification",
       "type": "object"
     },
+    "AgentPath": {
+      "type": "string"
+    },
     "AnalyticsConfig": {
       "additionalProperties": true,
       "properties": {
@@ -592,11 +595,15 @@
         },
         "name": {
           "type": "string"
+        },
+        "needsAuth": {
+          "type": "boolean"
         }
       },
       "required": [
         "id",
-        "name"
+        "name",
+        "needsAuth"
       ],
       "type": "object"
     },
@@ -707,6 +714,13 @@
           "type": "string"
         }
       ]
+    },
+    "AutoReviewDecisionSource": {
+      "description": "[UNSTABLE] Source that produced a terminal guardian approval review decision.",
+      "enum": [
+        "agent"
+      ],
+      "type": "string"
     },
     "ByteRange": {
       "properties": {
@@ -1074,6 +1088,30 @@
             "params"
           ],
           "title": "Thread/compact/startRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/shellCommand"
+              ],
+              "title": "Thread/shellCommandRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadShellCommandParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/shellCommandRequest",
           "type": "object"
         },
         {
@@ -1467,6 +1505,54 @@
             },
             "method": {
               "enum": [
+                "fs/watch"
+              ],
+              "title": "Fs/watchRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/FsWatchParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Fs/watchRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "fs/unwatch"
+              ],
+              "title": "Fs/unwatchRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/FsUnwatchParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Fs/unwatchRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "skills/config/write"
               ],
               "title": "Skills/config/writeRequestMethod",
@@ -1707,6 +1793,30 @@
             },
             "method": {
               "enum": [
+                "thread/realtime/listVoices"
+              ],
+              "title": "Thread/realtime/listVoicesRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRealtimeListVoicesParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/realtime/listVoicesRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
                 "review/start"
               ],
               "title": "Review/startRequestMethod",
@@ -1770,6 +1880,30 @@
             "params"
           ],
           "title": "ExperimentalFeature/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "experimentalFeature/enablement/set"
+              ],
+              "title": "ExperimentalFeature/enablement/setRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ExperimentalFeatureEnablementSetParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "ExperimentalFeature/enablement/setRequest",
           "type": "object"
         },
         {
@@ -1891,6 +2025,30 @@
             "params"
           ],
           "title": "McpServerStatus/listRequest",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "mcpServer/resource/read"
+              ],
+              "title": "McpServer/resource/readRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/McpResourceReadParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "McpServer/resource/readRequest",
           "type": "object"
         },
         {
@@ -2512,6 +2670,28 @@
           ],
           "title": "ResponseTooManyFailedAttemptsCodexErrorInfo",
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
+          "properties": {
+            "activeTurnNotSteerable": {
+              "properties": {
+                "turnKind": {
+                  "$ref": "#/definitions/NonSteerableTurnKind"
+                }
+              },
+              "required": [
+                "turnKind"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "activeTurnNotSteerable"
+          ],
+          "title": "ActiveTurnNotSteerableCodexErrorInfo",
+          "type": "object"
         }
       ]
     },
@@ -3036,6 +3216,15 @@
       ],
       "title": "CommandExecutionOutputDeltaNotification",
       "type": "object"
+    },
+    "CommandExecutionSource": {
+      "enum": [
+        "agent",
+        "userShell",
+        "unifiedExecStartup",
+        "unifiedExecInteraction"
+      ],
+      "type": "string"
     },
     "CommandExecutionStatus": {
       "enum": [
@@ -3587,6 +3776,15 @@
             "null"
           ]
         },
+        "allowedApprovalsReviewers": {
+          "items": {
+            "$ref": "#/definitions/ApprovalsReviewer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "allowedSandboxModes": {
           "items": {
             "$ref": "#/definitions/SandboxMode"
@@ -4035,6 +4233,40 @@
       ],
       "type": "object"
     },
+    "ExperimentalFeatureEnablementSetParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "enablement": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Process-wide runtime feature enablement keyed by canonical feature name.\n\nOnly named features are updated. Omitted features are left unchanged. Send an empty map for a no-op.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "enablement"
+      ],
+      "title": "ExperimentalFeatureEnablementSetParams",
+      "type": "object"
+    },
+    "ExperimentalFeatureEnablementSetResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "enablement": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Feature enablement entries updated by this request.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "enablement"
+      ],
+      "title": "ExperimentalFeatureEnablementSetResponse",
+      "type": "object"
+    },
     "ExperimentalFeatureListParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -4311,6 +4543,29 @@
       ],
       "type": "string"
     },
+    "FsChangedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Filesystem watch notification emitted for `fs/watch` subscribers.",
+      "properties": {
+        "changedPaths": {
+          "description": "File or directory paths associated with this event.",
+          "items": {
+            "$ref": "#/definitions/AbsolutePathBuf"
+          },
+          "type": "array"
+        },
+        "watchId": {
+          "description": "Watch identifier previously provided to `fs/watch`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "changedPaths",
+        "watchId"
+      ],
+      "title": "FsChangedNotification",
+      "type": "object"
+    },
     "FsCopyParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "Copy a file or directory tree on the host filesystem.",
@@ -4565,6 +4820,70 @@
       "title": "FsRemoveResponse",
       "type": "object"
     },
+    "FsUnwatchParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Stop filesystem watch notifications for a prior `fs/watch`.",
+      "properties": {
+        "watchId": {
+          "description": "Watch identifier previously provided to `fs/watch`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "watchId"
+      ],
+      "title": "FsUnwatchParams",
+      "type": "object"
+    },
+    "FsUnwatchResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Successful response for `fs/unwatch`.",
+      "title": "FsUnwatchResponse",
+      "type": "object"
+    },
+    "FsWatchParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Start filesystem watch notifications for an absolute path.",
+      "properties": {
+        "path": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            }
+          ],
+          "description": "Absolute file or directory path to watch."
+        },
+        "watchId": {
+          "description": "Connection-scoped watch identifier used for `fs/unwatch` and `fs/changed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "watchId"
+      ],
+      "title": "FsWatchParams",
+      "type": "object"
+    },
+    "FsWatchResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "Successful response for `fs/watch`.",
+      "properties": {
+        "path": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            }
+          ],
+          "description": "Canonicalized path associated with the watch."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FsWatchResponse",
+      "type": "object"
+    },
     "FsWriteFileParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "Write a file on the host filesystem.",
@@ -4663,6 +4982,13 @@
         }
       ]
     },
+    "FuzzyFileSearchMatchType": {
+      "enum": [
+        "file",
+        "directory"
+      ],
+      "type": "string"
+    },
     "FuzzyFileSearchParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -4706,6 +5032,9 @@
             "null"
           ]
         },
+        "match_type": {
+          "$ref": "#/definitions/FuzzyFileSearchMatchType"
+        },
         "path": {
           "type": "string"
         },
@@ -4720,6 +5049,7 @@
       },
       "required": [
         "file_name",
+        "match_type",
         "path",
         "root",
         "score"
@@ -4950,22 +5280,194 @@
             }
           ]
         },
-        "riskScore": {
-          "format": "uint8",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
         "status": {
           "$ref": "#/definitions/GuardianApprovalReviewStatus"
+        },
+        "userAuthorization": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GuardianUserAuthorization"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "status"
       ],
       "type": "object"
+    },
+    "GuardianApprovalReviewAction": {
+      "oneOf": [
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/GuardianCommandSource"
+            },
+            "type": {
+              "enum": [
+                "command"
+              ],
+              "title": "CommandGuardianApprovalReviewActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "command",
+            "cwd",
+            "source",
+            "type"
+          ],
+          "title": "CommandGuardianApprovalReviewAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "argv": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "program": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/GuardianCommandSource"
+            },
+            "type": {
+              "enum": [
+                "execve"
+              ],
+              "title": "ExecveGuardianApprovalReviewActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "argv",
+            "cwd",
+            "program",
+            "source",
+            "type"
+          ],
+          "title": "ExecveGuardianApprovalReviewAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "files": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "enum": [
+                "applyPatch"
+              ],
+              "title": "ApplyPatchGuardianApprovalReviewActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cwd",
+            "files",
+            "type"
+          ],
+          "title": "ApplyPatchGuardianApprovalReviewAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "format": "uint16",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "protocol": {
+              "$ref": "#/definitions/NetworkApprovalProtocol"
+            },
+            "target": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "networkAccess"
+              ],
+              "title": "NetworkAccessGuardianApprovalReviewActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "host",
+            "port",
+            "protocol",
+            "target",
+            "type"
+          ],
+          "title": "NetworkAccessGuardianApprovalReviewAction",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "connectorId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "connectorName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "server": {
+              "type": "string"
+            },
+            "toolName": {
+              "type": "string"
+            },
+            "toolTitle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "enum": [
+                "mcpToolCall"
+              ],
+              "title": "McpToolCallGuardianApprovalReviewActionType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "server",
+            "toolName",
+            "type"
+          ],
+          "title": "McpToolCallGuardianApprovalReviewAction",
+          "type": "object"
+        }
+      ]
     },
     "GuardianApprovalReviewStatus": {
       "description": "[UNSTABLE] Lifecycle state for a guardian approval review.",
@@ -4977,9 +5479,27 @@
       ],
       "type": "string"
     },
+    "GuardianCommandSource": {
+      "enum": [
+        "shell",
+        "unifiedExec"
+      ],
+      "type": "string"
+    },
     "GuardianRiskLevel": {
       "description": "[UNSTABLE] Risk level assigned by guardian approval review.",
       "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "type": "string"
+    },
+    "GuardianUserAuthorization": {
+      "description": "[UNSTABLE] Authorization level assigned by guardian approval review.",
+      "enum": [
+        "unknown",
         "low",
         "medium",
         "high"
@@ -5011,6 +5531,8 @@
     },
     "HookEventName": {
       "enum": [
+        "preToolUse",
+        "postToolUse",
         "sessionStart",
         "userPromptSubmit",
         "stop"
@@ -5056,6 +5578,21 @@
         "error"
       ],
       "type": "string"
+    },
+    "HookPromptFragment": {
+      "properties": {
+        "hookRunId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "hookRunId",
+        "text"
+      ],
+      "type": "object"
     },
     "HookRunStatus": {
       "enum": [
@@ -5264,14 +5801,27 @@
     },
     "ItemGuardianApprovalReviewCompletedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "description": "[UNSTABLE] Temporary notification payload for guardian automatic approval review. This shape is expected to change soon.\n\nTODO(ccunningham): Attach guardian review state to the reviewed tool item's lifecycle instead of sending separate standalone review notifications so the app-server API can persist and replay review state via `thread/read`.",
+      "description": "[UNSTABLE] Temporary notification payload for guardian automatic approval review. This shape is expected to change soon.",
       "properties": {
-        "action": true,
+        "action": {
+          "$ref": "#/definitions/GuardianApprovalReviewAction"
+        },
+        "decisionSource": {
+          "$ref": "#/definitions/AutoReviewDecisionSource"
+        },
         "review": {
           "$ref": "#/definitions/GuardianApprovalReview"
         },
-        "targetItemId": {
+        "reviewId": {
+          "description": "Stable identifier for this review.",
           "type": "string"
+        },
+        "targetItemId": {
+          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are - execve reviews, where a single command may contain multiple execve calls to review (only possible when using the shell_zsh_fork feature) - network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a target_item_id set to the CommandExecution item would be misleading because the review is about the network call, not the command execution. Therefore, target_item_id is set to None for network policy reviews.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "threadId": {
           "type": "string"
@@ -5281,8 +5831,10 @@
         }
       },
       "required": [
+        "action",
+        "decisionSource",
         "review",
-        "targetItemId",
+        "reviewId",
         "threadId",
         "turnId"
       ],
@@ -5291,14 +5843,24 @@
     },
     "ItemGuardianApprovalReviewStartedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "description": "[UNSTABLE] Temporary notification payload for guardian automatic approval review. This shape is expected to change soon.\n\nTODO(ccunningham): Attach guardian review state to the reviewed tool item's lifecycle instead of sending separate standalone review notifications so the app-server API can persist and replay review state via `thread/read`.",
+      "description": "[UNSTABLE] Temporary notification payload for guardian automatic approval review. This shape is expected to change soon.",
       "properties": {
-        "action": true,
+        "action": {
+          "$ref": "#/definitions/GuardianApprovalReviewAction"
+        },
         "review": {
           "$ref": "#/definitions/GuardianApprovalReview"
         },
-        "targetItemId": {
+        "reviewId": {
+          "description": "Stable identifier for this review.",
           "type": "string"
+        },
+        "targetItemId": {
+          "description": "Identifier for the reviewed item or tool call when one exists.\n\nIn most cases, one review maps to one target item. The exceptions are - execve reviews, where a single command may contain multiple execve calls to review (only possible when using the shell_zsh_fork feature) - network policy reviews, where there is no target item\n\nA network call is triggered by a CommandExecution item, so having a target_item_id set to the CommandExecution item would be misleading because the review is about the network call, not the command execution. Therefore, target_item_id is set to None for network policy reviews.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "threadId": {
           "type": "string"
@@ -5308,8 +5870,9 @@
         }
       },
       "required": [
+        "action",
         "review",
-        "targetItemId",
+        "reviewId",
         "threadId",
         "turnId"
       ],
@@ -5346,6 +5909,17 @@
             "string",
             "null"
           ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/McpServerStatusDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Controls how much MCP inventory data to fetch for each server. Defaults to `Full` when omitted."
         },
         "limit": {
           "description": "Optional page size; defaults to a server-defined value.",
@@ -5487,6 +6061,22 @@
           "type": "object"
         },
         {
+          "properties": {
+            "type": {
+              "enum": [
+                "chatgptDeviceCode"
+              ],
+              "title": "ChatgptDeviceCodev2::LoginAccountParamsType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "ChatgptDeviceCodev2::LoginAccountParams",
+          "type": "object"
+        },
+        {
           "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
           "properties": {
             "accessToken": {
@@ -5569,6 +6159,36 @@
         },
         {
           "properties": {
+            "loginId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "chatgptDeviceCode"
+              ],
+              "title": "ChatgptDeviceCodev2::LoginAccountResponseType",
+              "type": "string"
+            },
+            "userCode": {
+              "description": "One-time code the user must enter after signing in.",
+              "type": "string"
+            },
+            "verificationUrl": {
+              "description": "URL the client should open in a browser to complete device code authorization.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "loginId",
+            "type",
+            "userCode",
+            "verificationUrl"
+          ],
+          "title": "ChatgptDeviceCodev2::LoginAccountResponse",
+          "type": "object"
+        },
+        {
+          "properties": {
             "type": {
               "enum": [
                 "chatgptAuthTokens"
@@ -5602,6 +6222,21 @@
       },
       "type": "object"
     },
+    "MarketplaceLoadErrorInfo": {
+      "properties": {
+        "marketplacePath": {
+          "$ref": "#/definitions/AbsolutePathBuf"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "marketplacePath",
+        "message"
+      ],
+      "type": "object"
+    },
     "McpAuthStatus": {
       "enum": [
         "unsupported",
@@ -5610,6 +6245,43 @@
         "oAuth"
       ],
       "type": "string"
+    },
+    "McpResourceReadParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "server": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "threadId",
+        "uri"
+      ],
+      "title": "McpResourceReadParams",
+      "type": "object"
+    },
+    "McpResourceReadResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "contents": {
+          "items": {
+            "$ref": "#/definitions/ResourceContent"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "contents"
+      ],
+      "title": "McpResourceReadResponse",
+      "type": "object"
     },
     "McpServerOauthLoginCompletedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -5681,6 +6353,15 @@
       "title": "McpServerRefreshResponse",
       "type": "object"
     },
+    "McpServerStartupState": {
+      "enum": [
+        "starting",
+        "ready",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
     "McpServerStatus": {
       "properties": {
         "authStatus": {
@@ -5715,6 +6396,36 @@
         "resources",
         "tools"
       ],
+      "type": "object"
+    },
+    "McpServerStatusDetail": {
+      "enum": [
+        "full",
+        "toolsAndAuthOnly"
+      ],
+      "type": "string"
+    },
+    "McpServerStatusUpdatedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/McpServerStartupState"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "McpServerStatusUpdatedNotification",
       "type": "object"
     },
     "McpToolCallError": {
@@ -5755,6 +6466,7 @@
     },
     "McpToolCallResult": {
       "properties": {
+        "_meta": true,
         "content": {
           "items": true,
           "type": "array"
@@ -5886,6 +6598,13 @@
     },
     "Model": {
       "properties": {
+        "additionalSpeedTiers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "availabilityNux": {
           "anyOf": [
             {
@@ -6101,9 +6820,26 @@
       ],
       "type": "string"
     },
+    "NetworkApprovalProtocol": {
+      "enum": [
+        "http",
+        "https",
+        "socks5Tcp",
+        "socks5Udp"
+      ],
+      "type": "string"
+    },
+    "NetworkDomainPermission": {
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "type": "string"
+    },
     "NetworkRequirements": {
       "properties": {
         "allowedDomains": {
+          "description": "Legacy compatibility view derived from `domains`.",
           "items": {
             "type": "string"
           },
@@ -6119,6 +6855,7 @@
           ]
         },
         "allowUnixSockets": {
+          "description": "Legacy compatibility view derived from `unix_sockets`.",
           "items": {
             "type": "string"
           },
@@ -6128,6 +6865,12 @@
           ]
         },
         "allowUpstreamProxy": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dangerFullAccessDenylistOnly": {
           "type": [
             "boolean",
             "null"
@@ -6146,11 +6889,22 @@
           ]
         },
         "deniedDomains": {
+          "description": "Legacy compatibility view derived from `domains`.",
           "items": {
             "type": "string"
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "domains": {
+          "additionalProperties": {
+            "$ref": "#/definitions/NetworkDomainPermission"
+          },
+          "description": "Canonical network permission map for `experimental_network`.",
+          "type": [
+            "object",
             "null"
           ]
         },
@@ -6168,6 +6922,13 @@
             "null"
           ]
         },
+        "managedAllowedDomainsOnly": {
+          "description": "When true, only managed allowlist entries are respected while managed network enforcement is active.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "socksPort": {
           "format": "uint16",
           "minimum": 0,
@@ -6175,9 +6936,33 @@
             "integer",
             "null"
           ]
+        },
+        "unixSockets": {
+          "additionalProperties": {
+            "$ref": "#/definitions/NetworkUnixSocketPermission"
+          },
+          "description": "Canonical unix socket permission map for `experimental_network`.",
+          "type": [
+            "object",
+            "null"
+          ]
         }
       },
       "type": "object"
+    },
+    "NetworkUnixSocketPermission": {
+      "enum": [
+        "allow",
+        "none"
+      ],
+      "type": "string"
+    },
+    "NonSteerableTurnKind": {
+      "enum": [
+        "review",
+        "compact"
+      ],
+      "type": "string"
     },
     "OverriddenMetadata": {
       "properties": {
@@ -6304,7 +7089,9 @@
         "plus",
         "pro",
         "team",
+        "self_serve_business_usage_based",
         "business",
+        "enterprise_cbp_usage_based",
         "enterprise",
         "edu",
         "unknown"
@@ -6542,6 +7329,20 @@
     "PluginListResponse": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "featuredPluginIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "marketplaceLoadErrors": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MarketplaceLoadErrorInfo"
+          },
+          "type": "array"
+        },
         "marketplaces": {
           "items": {
             "$ref": "#/definitions/PluginMarketplaceEntry"
@@ -6977,6 +7778,59 @@
       ],
       "type": "string"
     },
+    "RealtimeVoice": {
+      "enum": [
+        "alloy",
+        "arbor",
+        "ash",
+        "ballad",
+        "breeze",
+        "cedar",
+        "coral",
+        "cove",
+        "echo",
+        "ember",
+        "juniper",
+        "maple",
+        "marin",
+        "sage",
+        "shimmer",
+        "sol",
+        "spruce",
+        "vale",
+        "verse"
+      ],
+      "type": "string"
+    },
+    "RealtimeVoicesList": {
+      "properties": {
+        "defaultV1": {
+          "$ref": "#/definitions/RealtimeVoice"
+        },
+        "defaultV2": {
+          "$ref": "#/definitions/RealtimeVoice"
+        },
+        "v1": {
+          "items": {
+            "$ref": "#/definitions/RealtimeVoice"
+          },
+          "type": "array"
+        },
+        "v2": {
+          "items": {
+            "$ref": "#/definitions/RealtimeVoice"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "defaultV1",
+        "defaultV2",
+        "v1",
+        "v2"
+      ],
+      "type": "object"
+    },
     "ReasoningEffort": {
       "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
       "enum": [
@@ -7244,6 +8098,57 @@
         "uri"
       ],
       "type": "object"
+    },
+    "ResourceContent": {
+      "anyOf": [
+        {
+          "properties": {
+            "_meta": true,
+            "mimeType": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "uri": {
+              "description": "The URI of this resource.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "uri"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "_meta": true,
+            "blob": {
+              "type": "string"
+            },
+            "mimeType": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "uri": {
+              "description": "The URI of this resource.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "blob",
+            "uri"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Contents returned when reading a resource from an MCP server."
     },
     "ResourceTemplate": {
       "description": "A template description for resources available on the server.",
@@ -8721,6 +9626,26 @@
           "properties": {
             "method": {
               "enum": [
+                "mcpServer/startupStatus/updated"
+              ],
+              "title": "McpServer/startupStatus/updatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/McpServerStatusUpdatedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "McpServer/startupStatus/updatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "account/updated"
               ],
               "title": "Account/updatedNotificationMethod",
@@ -8775,6 +9700,26 @@
             "params"
           ],
           "title": "App/list/updatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "fs/changed"
+              ],
+              "title": "Fs/changedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/FsChangedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Fs/changedNotification",
           "type": "object"
         },
         {
@@ -9002,6 +9947,26 @@
           "properties": {
             "method": {
               "enum": [
+                "thread/realtime/transcriptUpdated"
+              ],
+              "title": "Thread/realtime/transcriptUpdatedNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRealtimeTranscriptUpdatedNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/realtime/transcriptUpdatedNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "thread/realtime/outputAudio/delta"
               ],
               "title": "Thread/realtime/outputAudio/deltaNotificationMethod",
@@ -9016,6 +9981,26 @@
             "params"
           ],
           "title": "Thread/realtime/outputAudio/deltaNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "thread/realtime/sdp"
+              ],
+              "title": "Thread/realtime/sdpNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRealtimeSdpNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Thread/realtime/sdpNotification",
           "type": "object"
         },
         {
@@ -9350,13 +10335,27 @@
         "enabled": {
           "type": "boolean"
         },
+        "name": {
+          "description": "Name-based selector.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "path": {
-          "type": "string"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AbsolutePathBuf"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path-based selector."
         }
       },
       "required": [
-        "enabled",
-        "path"
+        "enabled"
       ],
       "title": "SkillsConfigWriteParams",
       "type": "object"
@@ -9476,6 +10475,9 @@
         "description": {
           "type": "string"
         },
+        "enabled": {
+          "type": "boolean"
+        },
         "interface": {
           "anyOf": [
             {
@@ -9501,6 +10503,7 @@
       },
       "required": [
         "description",
+        "enabled",
         "name",
         "path"
       ],
@@ -9566,6 +10569,17 @@
                     "string",
                     "null"
                   ]
+                },
+                "agent_path": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/AgentPath"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
                 "agent_role": {
                   "default": null,
@@ -9730,6 +10744,13 @@
         "ephemeral": {
           "description": "Whether the thread is ephemeral and should not be materialized on disk.",
           "type": "boolean"
+        },
+        "forkedFromId": {
+          "description": "Source thread id when this thread was created by forking another thread.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "gitInfo": {
           "anyOf": [
@@ -10183,6 +11204,33 @@
         },
         {
           "properties": {
+            "fragments": {
+              "items": {
+                "$ref": "#/definitions/HookPromptFragment"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "hookPrompt"
+              ],
+              "title": "HookPromptThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "fragments",
+            "id",
+            "type"
+          ],
+          "title": "HookPromptThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
             "id": {
               "type": "string"
             },
@@ -10335,6 +11383,14 @@
                 "string",
                 "null"
               ]
+            },
+            "source": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CommandExecutionSource"
+                }
+              ],
+              "default": "agent"
             },
             "status": {
               "$ref": "#/definitions/CommandExecutionStatus"
@@ -10656,6 +11712,12 @@
               "type": "string"
             },
             "revisedPrompt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "savedPath": {
               "type": [
                 "string",
                 "null"
@@ -11149,6 +12211,26 @@
       "title": "ThreadRealtimeItemAddedNotification",
       "type": "object"
     },
+    "ThreadRealtimeListVoicesParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "EXPERIMENTAL - list voices supported by thread realtime.",
+      "title": "ThreadRealtimeListVoicesParams",
+      "type": "object"
+    },
+    "ThreadRealtimeListVoicesResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "EXPERIMENTAL - response for listing supported realtime voices.",
+      "properties": {
+        "voices": {
+          "$ref": "#/definitions/RealtimeVoicesList"
+        }
+      },
+      "required": [
+        "voices"
+      ],
+      "title": "ThreadRealtimeListVoicesResponse",
+      "type": "object"
+    },
     "ThreadRealtimeOutputAudioDeltaNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "EXPERIMENTAL - streamed output audio emitted by thread realtime.",
@@ -11165,6 +12247,24 @@
         "threadId"
       ],
       "title": "ThreadRealtimeOutputAudioDeltaNotification",
+      "type": "object"
+    },
+    "ThreadRealtimeSdpNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "EXPERIMENTAL - emitted with the remote SDP for a WebRTC realtime session.",
+      "properties": {
+        "sdp": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sdp",
+        "threadId"
+      ],
+      "title": "ThreadRealtimeSdpNotification",
       "type": "object"
     },
     "ThreadRealtimeStartedNotification": {
@@ -11196,7 +12296,10 @@
       "description": "EXPERIMENTAL - start a thread-scoped realtime session.",
       "properties": {
         "prompt": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "sessionId": {
           "type": [
@@ -11206,10 +12309,29 @@
         },
         "threadId": {
           "type": "string"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadRealtimeStartTransport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RealtimeVoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "prompt",
         "threadId"
       ],
       "title": "ThreadRealtimeStartParams",
@@ -11220,6 +12342,48 @@
       "description": "EXPERIMENTAL - response for starting thread realtime.",
       "title": "ThreadRealtimeStartResponse",
       "type": "object"
+    },
+    "ThreadRealtimeStartTransport": {
+      "description": "EXPERIMENTAL - transport used by thread realtime.",
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "websocket"
+              ],
+              "title": "WebsocketThreadRealtimeStartTransportType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "WebsocketThreadRealtimeStartTransport",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "sdp": {
+              "description": "SDP offer generated by a WebRTC RTCPeerConnection after configuring audio and the realtime events data channel.",
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "webrtc"
+              ],
+              "title": "WebrtcThreadRealtimeStartTransportType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sdp",
+            "type"
+          ],
+          "title": "WebrtcThreadRealtimeStartTransport",
+          "type": "object"
+        }
+      ]
     },
     "ThreadRealtimeStopParams": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -11239,6 +12403,28 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "EXPERIMENTAL - response for stopping thread realtime.",
       "title": "ThreadRealtimeStopResponse",
+      "type": "object"
+    },
+    "ThreadRealtimeTranscriptUpdatedNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "EXPERIMENTAL - flat transcript delta emitted whenever realtime transcript text changes.",
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "text",
+        "threadId"
+      ],
+      "title": "ThreadRealtimeTranscriptUpdatedNotification",
       "type": "object"
     },
     "ThreadResumeParams": {
@@ -11495,6 +12681,29 @@
       "title": "ThreadSetNameResponse",
       "type": "object"
     },
+    "ThreadShellCommandParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "command": {
+          "description": "Shell command string evaluated by the thread's configured shell. Unlike `command/exec`, this intentionally preserves shell syntax such as pipes, redirects, and quoting. This runs unsandboxed with full access rather than inheriting the thread sandbox policy.",
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "threadId"
+      ],
+      "title": "ThreadShellCommandParams",
+      "type": "object"
+    },
+    "ThreadShellCommandResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ThreadShellCommandResponse",
+      "type": "object"
+    },
     "ThreadSortKey": {
       "enum": [
         "created_at",
@@ -11508,7 +12717,6 @@
         "vscode",
         "exec",
         "appServer",
-        "custom",
         "subAgent",
         "subAgentReview",
         "subAgentCompact",
@@ -11666,6 +12874,16 @@
               "type": "null"
             }
           ]
+        },
+        "sessionStartSource": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadStartSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "title": "ThreadStartParams",
@@ -11732,6 +12950,13 @@
       ],
       "title": "ThreadStartResponse",
       "type": "object"
+    },
+    "ThreadStartSource": {
+      "enum": [
+        "startup",
+        "clear"
+      ],
+      "type": "string"
     },
     "ThreadStatus": {
       "oneOf": [
@@ -12032,6 +13257,22 @@
     },
     "Turn": {
       "properties": {
+        "completedAt": {
+          "description": "Unix timestamp (in seconds) when the turn completed.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "description": "Duration between turn start and completion in milliseconds, if known.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "error": {
           "anyOf": [
             {
@@ -12052,6 +13293,14 @@
             "$ref": "#/definitions/ThreadItem"
           },
           "type": "array"
+        },
+        "startedAt": {
+          "description": "Unix timestamp (in seconds) when the turn started.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "status": {
           "$ref": "#/definitions/TurnStatus"
@@ -12304,6 +13553,16 @@
           ],
           "description": "Override the personality for this turn and subsequent turns."
         },
+        "responsesapiClientMetadata": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Optional turn-scoped Responses API client metadata.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
         "sandboxPolicy": {
           "anyOf": [
             {
@@ -12389,6 +13648,16 @@
             "$ref": "#/definitions/UserInput"
           },
           "type": "array"
+        },
+        "responsesapiClientMetadata": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Optional turn-scoped Responses API client metadata.",
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "threadId": {
           "type": "string"
