@@ -30,7 +30,6 @@ import {
   type InitializeParams,
   type JsonValue,
   type LoginAccountResponse,
-  type McpServerElicitationRequestResponse,
   type RpcNotificationMessage,
   type Thread,
   type ThreadReadResponse,
@@ -704,32 +703,52 @@ describe("AppServerClient", () => {
           },
           scope: "turn"
         };
+      },
+      "item/tool/requestUserInput": (request) => {
+        approvalMethods.push(request.method);
+        expect(request.params.questions).toEqual([
+          {
+            id: "question_1",
+            header: "Decision",
+            question: "Allow this tool call?",
+            isOther: false,
+            isSecret: false,
+            options: [
+              {
+                label: "Accept",
+                description: "Run the tool."
+              },
+              {
+                label: "Decline",
+                description: "Do not run the tool."
+              }
+            ]
+          }
+        ]);
+        return {
+          answers: {
+            question_1: {
+              answers: ["Accept"]
+            }
+          }
+        };
+      },
+      "mcpServer/elicitation/request": (request) => {
+        approvalMethods.push(request.method);
+        expect(request.params.serverName).toBe("demo");
+        return {
+          action: "accept",
+          content: {
+            answer: "yes"
+          },
+          _meta: null
+        };
       }
     });
     client.handleRequest("item/tool/call", (): DynamicToolCallResponse => ({
       success: true,
       contentItems: []
     }));
-    client.handleRequest(
-      "mcpServer/elicitation/request",
-      (): McpServerElicitationRequestResponse => ({
-        action: "accept",
-        content: {
-          answer: "yes"
-        },
-        _meta: null
-      })
-    );
-    client.handleRequest(
-      "item/tool/requestUserInput",
-      (): ToolRequestUserInputResponse => ({
-        answers: {
-          question_1: {
-            answers: ["Recommended"]
-          }
-        }
-      })
-    );
     client.handleRequest(
       "account/chatgptAuthTokens/refresh",
       (): ChatgptAuthTokensRefreshResponse => ({
@@ -847,7 +866,25 @@ describe("AppServerClient", () => {
         threadId: "thread-1",
         turnId: "turn-1",
         itemId: "item-4",
-        questions: []
+        questions: [
+          {
+            id: "question_1",
+            header: "Decision",
+            question: "Allow this tool call?",
+            isOther: false,
+            isSecret: false,
+            options: [
+              {
+                label: "Accept",
+                description: "Run the tool."
+              },
+              {
+                label: "Decline",
+                description: "Do not run the tool."
+              }
+            ]
+          }
+        ]
       }
     });
     transport.emitMessage({
@@ -865,7 +902,9 @@ describe("AppServerClient", () => {
       "execCommandApproval",
       "item/commandExecution/requestApproval",
       "item/fileChange/requestApproval",
-      "item/permissions/requestApproval"
+      "item/permissions/requestApproval",
+      "mcpServer/elicitation/request",
+      "item/tool/requestUserInput"
     ]);
 
     expect(transport.sentMessages).toHaveLength(9);
@@ -928,7 +967,7 @@ describe("AppServerClient", () => {
           result: {
             answers: {
               question_1: {
-                answers: ["Recommended"]
+                answers: ["Accept"]
               }
             }
           }
@@ -943,6 +982,328 @@ describe("AppServerClient", () => {
         }
       ])
     );
+  });
+
+  it("routes approval requests through one normalized handler", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const approvalKinds: string[] = [];
+
+    client.handleApprovalRequests((request) => {
+      approvalKinds.push(request.kind);
+
+      switch (request.kind) {
+        case "applyPatch":
+          expect(request.threadId).toBe("thread-1");
+          return request.approve();
+        case "execCommand":
+          expect(request.command).toEqual(["echo", "hello"]);
+          return request.approve();
+        case "commandExecution":
+          expect(request.command).toBe("echo hello");
+          return request.approve();
+        case "fileChange":
+          return request.deny();
+        case "permissions":
+          expect(request.requestedPermissions.network).toEqual({
+            enabled: true
+          });
+          return request.allowRequestedPermissions("session");
+        case "toolUserInput":
+          expect(request.questions[0]?.prompt).toBe("Allow this tool call?");
+          return request.approve();
+        case "mcpElicitation":
+          expect(request.message).toBe("Need input");
+          return request.acceptElicitation({
+            answer: "yes"
+          });
+      }
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-apply-patch",
+      method: "applyPatchApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "patch-1",
+        fileChanges: {},
+        reason: null,
+        grantRoot: null
+      }
+    });
+    transport.emitMessage({
+      id: "req-exec-command",
+      method: "execCommandApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "exec-1",
+        approvalId: null,
+        command: ["echo", "hello"],
+        cwd: "/workspace",
+        reason: null,
+        parsedCmd: []
+      }
+    });
+    transport.emitMessage({
+      id: "req-approval",
+      method: "item/commandExecution/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-1",
+        command: "echo hello"
+      }
+    });
+    transport.emitMessage({
+      id: "req-file",
+      method: "item/fileChange/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-2"
+      }
+    });
+    transport.emitMessage({
+      id: "req-permissions",
+      method: "item/permissions/requestApproval",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-3",
+        reason: "Need network",
+        permissions: {
+          network: {
+            enabled: true
+          },
+          fileSystem: null
+        }
+      }
+    });
+    transport.emitMessage({
+      id: "req-elicitation",
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "demo",
+        mode: "form",
+        _meta: null,
+        message: "Need input",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "string"
+            }
+          },
+          required: []
+        }
+      }
+    });
+    transport.emitMessage({
+      id: "req-user-input",
+      method: "item/tool/requestUserInput",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        itemId: "item-4",
+        questions: [
+          {
+            id: "question_1",
+            header: "Decision",
+            question: "Allow this tool call?",
+            isOther: false,
+            isSecret: false,
+            options: [
+              {
+                label: "Accept",
+                description: "Run the tool."
+              },
+              {
+                label: "Decline",
+                description: "Do not run the tool."
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    await flushAsyncWork();
+
+    expect(approvalKinds).toEqual([
+      "applyPatch",
+      "execCommand",
+      "commandExecution",
+      "fileChange",
+      "permissions",
+      "mcpElicitation",
+      "toolUserInput"
+    ]);
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-apply-patch",
+        result: {
+          decision: "approved"
+        }
+      },
+      {
+        id: "req-exec-command",
+        result: {
+          decision: "approved"
+        }
+      },
+      {
+        id: "req-approval",
+        result: {
+          decision: "accept"
+        }
+      },
+      {
+        id: "req-file",
+        result: {
+          decision: "decline"
+        }
+      },
+      {
+        id: "req-permissions",
+        result: {
+          permissions: {
+            network: {
+              enabled: true
+            }
+          },
+          scope: "session"
+        }
+      },
+      {
+        id: "req-elicitation",
+        result: {
+          action: "accept",
+          content: {
+            answer: "yes"
+          },
+          _meta: null
+        }
+      },
+      {
+        id: "req-user-input",
+        result: {
+          answers: {
+            question_1: {
+              answers: ["Accept"]
+            }
+          }
+        }
+      }
+    ]);
+  });
+
+  it("subscribes to approval requests through one normalized listener", async () => {
+    const transport = new FakeTransport();
+    const client = new AppServerClient({ transport });
+    const requests: string[] = [];
+
+    client.onApprovalRequest((request) => {
+      requests.push(`${request.kind}:${request.method}`);
+
+      if (request.kind === "mcpElicitation") {
+        void request.respond(
+          request.acceptElicitation({
+            answer: "yes"
+          })
+        );
+        return;
+      }
+
+      void request.respond(request.approve() as never);
+    });
+
+    const initialize = client.initialize(createInitializeParams());
+    await flushAsyncWork();
+    transport.emitMessage({
+      id: 1,
+      result: {
+        userAgent: "codex",
+        platformFamily: "unix",
+        platformOs: "linux"
+      }
+    });
+    await initialize;
+    transport.sentMessages.length = 0;
+
+    transport.emitMessage({
+      id: "req-exec-command",
+      method: "execCommandApproval",
+      params: {
+        conversationId: "thread-1",
+        callId: "exec-1",
+        approvalId: null,
+        command: ["echo", "hello"],
+        cwd: "/workspace",
+        reason: null,
+        parsedCmd: []
+      }
+    });
+    transport.emitMessage({
+      id: "req-elicitation",
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "demo",
+        mode: "form",
+        _meta: null,
+        message: "Need input",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            answer: {
+              type: "string"
+            }
+          },
+          required: []
+        }
+      }
+    });
+
+    await flushAsyncWork();
+
+    expect(requests).toEqual([
+      "execCommand:execCommandApproval",
+      "mcpElicitation:mcpServer/elicitation/request"
+    ]);
+    expect(transport.sentMessages).toEqual([
+      {
+        id: "req-exec-command",
+        result: {
+          decision: "approved"
+        }
+      },
+      {
+        id: "req-elicitation",
+        result: {
+          action: "accept",
+          content: {
+            answer: "yes"
+          },
+          _meta: null
+        }
+      }
+    ]);
   });
 
   it("responds with an internal error when an approval handler throws", async () => {

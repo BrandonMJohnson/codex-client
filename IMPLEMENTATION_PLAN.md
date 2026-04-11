@@ -23,6 +23,12 @@ The protocol details in this plan are derived from that README, including:
 
 ## Progress Notes
 
+### 2026-04-11
+
+- Extended `handleApprovals()` to cover both `item/tool/requestUserInput` and `mcpServer/elicitation/request`, documented that mutating app/MCP tool calls require `experimentalApi: true`, and added a live Linear MCP integration test that accepts the approval prompt before the tool write proceeds.
+- Added a normalized `handleApprovalRequests()` helper so callers can implement one approval path without branching on the underlying app-server request method.
+- Added a live integration test that prompts a turn to use the Linear MCP for issue `MUD-115`, captures the resulting typed `item/tool/call` requests, returns tool-shaped responses through the client API, and asserts the Linear tool traffic resolves cleanly through turn completion.
+
 ### 2026-03-27
 
 - Added a zero-config `createClient()` factory that spawns a local `codex app-server`, completes the initialize handshake automatically, and returns a managed client whose `close()` tears down the child process.
@@ -237,6 +243,7 @@ codex app-server generate-json-schema --out schemas/experimental --experimental
 - [x] Support `item/fileChange/requestApproval`
 - [x] Support `item/permissions/requestApproval`
 - [x] Support `item/tool/call`
+- [x] Support `item/tool/requestUserInput`
 - [x] Support `mcpServer/elicitation/request`
 - [x] Expose pluggable handlers for approval and request flows
 - [x] Ensure responses are sent in the exact shapes expected by the protocol

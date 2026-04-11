@@ -102,6 +102,7 @@ await client.initialize({
     version: "0.0.1"
   },
   capabilities: {
+    experimentalApi: false,
     optOutNotificationMethods: []
   }
 });
@@ -213,7 +214,27 @@ If you need protocol-fidelity access without narrowing to generated methods, use
 
 `codex app-server` can send server-initiated requests for approvals, tool calls, and structured input. The client supports these as first-class typed callbacks.
 
-For approval-heavy flows, `handleApprovals()` wires the common approval methods into one object:
+For approval-heavy flows, `handleApprovalRequests()` gives you one normalized approval path:
+
+```ts
+const stopApprovals = client.handleApprovalRequests((request) => {
+  switch (request.kind) {
+    case "permissions":
+      return request.allowRequestedPermissions("turn");
+    case "toolUserInput":
+      return request.approve();
+    case "mcpElicitation":
+      return request.approve();
+    default:
+      return request.deny();
+  }
+});
+
+// Later:
+stopApprovals();
+```
+
+If you need per-method control, `handleApprovals()` still wires the underlying protocol methods into one object:
 
 ```ts
 const stopApprovals = client.handleApprovals({
@@ -224,12 +245,41 @@ const stopApprovals = client.handleApprovals({
   "item/permissions/requestApproval": () => ({
     permissions: {},
     scope: "turn"
+  }),
+  "item/tool/requestUserInput": (request) => ({
+    answers: Object.fromEntries(
+      request.params.questions.map((question) => [
+        question.id,
+        { answers: ["Accept"] }
+      ])
+    )
+  }),
+  "mcpServer/elicitation/request": () => ({
+    action: "accept",
+    content: {},
+    _meta: null
   })
 });
 
 // Later:
 stopApprovals();
 ```
+
+When you need side-effecting app or MCP tool calls, initialize the connection with `capabilities.experimentalApi: true` so app-server can emit the approval prompt before it performs the write. Depending on the server path, that prompt can arrive as either `item/tool/requestUserInput` or `mcpServer/elicitation/request`, but `handleApprovalRequests()` hides that split behind one callback.
+
+### Approve Mutating App And MCP Tool Calls
+
+Read-only app or MCP calls may complete without any extra client work beyond the normal turn lifecycle. Mutating calls are different: app-server can pause the turn, ask the client to approve the write, and only continue after the client responds.
+
+For example, a Linear write can look like:
+
+1. The model starts an `mcpToolCall` item for the connector tool.
+2. app-server sends either `item/tool/requestUserInput` or `mcpServer/elicitation/request`.
+3. Your client responds through `handleApprovalRequests()`, `handleApprovals()`, or `handleRequest()`.
+4. app-server emits `serverRequest/resolved`.
+5. The `mcpToolCall` item completes and the turn continues.
+
+If your client does not answer that request, the write stalls even though the connection and turn are otherwise healthy.
 
 For lower-level control, register a handler for the exact server request method:
 

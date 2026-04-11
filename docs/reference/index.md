@@ -4,7 +4,7 @@ The package exposes a single supported public entrypoint at the root import. Tha
 
 ## `AppServerClient`
 
-Most consumers should start here. `AppServerClient` handles the initialize lifecycle, exposes typed request helpers, and includes higher-level helpers for streamed turns and approval flows.
+Most consumers should start here. `AppServerClient` handles the initialize lifecycle, exposes typed request helpers, and includes higher-level helpers for streamed turns and approval flows, including the prompt shapes used before mutating app or MCP tool calls can continue.
 
 The detailed reference lives on the dedicated page:
 
@@ -15,8 +15,9 @@ That page covers:
 - lifecycle methods like `start()`, `initialize()`, `initialized()`, and `close()`
 - catalog methods like `appList()`, `modelList()`, and `skillsList()`
 - the `thread`, `turn`, `command`, `fs`, and `account` namespaces
-- event, request, approval, error, and close subscriptions
+- event, request, approval, error, and close subscriptions, including the normalized `handleApprovalRequests()` helper
 - streamed helper results such as `turn.run()` and `thread.run()`
+- `experimentalApi` usage for side-effecting app and MCP tool flows
 
 ## `StdioTransport`
 

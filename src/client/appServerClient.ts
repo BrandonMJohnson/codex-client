@@ -24,10 +24,17 @@ import {
 } from "./threadStartOptions.js";
 import {
   APPROVAL_REQUEST_METHODS,
+  createNormalizedApprovalRequest,
   type AppServerClientApprovalHandlers,
+  type AppServerClientApprovalHandler,
+  type AppServerClientApprovalRequest,
+  type AppServerClientInboundApprovalRequest,
+  type AppServerClientInboundApprovalRequestOf,
   type AppServerClientApprovalRequestMethod,
   type AppServerClientApprovalRequestOf,
-  type AppServerClientApprovalResponseOf
+  type AppServerClientApprovalResponse,
+  type AppServerClientApprovalResponseOf,
+  isApprovalRequestMethod
 } from "./approvalHandling.js";
 import type {
   Account,
@@ -740,6 +747,28 @@ export class AppServerClient {
   }
 
   /**
+   * Subscribe to approval-oriented requests through one normalized callback so
+   * callers do not have to branch on the exact underlying protocol method just
+   * to decide whether the operation should proceed.
+   */
+  public onApprovalRequest(
+    listener: (request: AppServerClientInboundApprovalRequest) => void
+  ): () => void {
+    return this.#session.onRequest((request) => {
+      if (!isApprovalRequestMethod(request.method)) {
+        return;
+      }
+
+      listener(
+        this.#createNormalizedApprovalRequestWrapper(
+          request.method,
+          request
+        ).request
+      );
+    });
+  }
+
+  /**
    * Subscribe to a specific server-initiated request method with generated
    * payload typing while keeping manual control over the response lifecycle.
    */
@@ -817,7 +846,9 @@ export class AppServerClient {
 
   /**
    * Register typed approval handlers for the approval-style server request
-   * methods that app-server emits during risky operations.
+   * methods that app-server emits during risky operations, including the
+   * approval and form-style prompts used before side-effecting app or MCP tool
+   * calls can proceed.
    *
    * Provide the method handlers you want to auto-handle. Each handler returns
    * the exact protocol response for that method, while the lower-level
@@ -890,53 +921,90 @@ export class AppServerClient {
         return;
       }
 
-      switch (request.method) {
-        case "applyPatchApproval":
-          if (handlers.applyPatchApproval) {
-            dispatchApprovalRequest(
-              "applyPatchApproval",
-              request,
-              handlers.applyPatchApproval
-            );
-          }
-          return;
-        case "execCommandApproval":
-          if (handlers.execCommandApproval) {
-            dispatchApprovalRequest(
-              "execCommandApproval",
-              request,
-              handlers.execCommandApproval
-            );
-          }
-          return;
-        case "item/commandExecution/requestApproval":
-          if (handlers["item/commandExecution/requestApproval"]) {
-            dispatchApprovalRequest(
-              "item/commandExecution/requestApproval",
-              request,
-              handlers["item/commandExecution/requestApproval"]
-            );
-          }
-          return;
-        case "item/fileChange/requestApproval":
-          if (handlers["item/fileChange/requestApproval"]) {
-            dispatchApprovalRequest(
-              "item/fileChange/requestApproval",
-              request,
-              handlers["item/fileChange/requestApproval"]
-            );
-          }
-          return;
-        case "item/permissions/requestApproval":
-          if (handlers["item/permissions/requestApproval"]) {
-            dispatchApprovalRequest(
-              "item/permissions/requestApproval",
-              request,
-              handlers["item/permissions/requestApproval"]
-            );
-          }
-          return;
+      const handler = handlers[request.method];
+      if (handler === undefined) {
+        return;
       }
+
+      dispatchApprovalRequest(request.method, request, handler);
+    });
+
+    return () => {
+      for (const method of activeMethods) {
+        this.#autoHandledRequestMethods.delete(method);
+      }
+
+      unsubscribe();
+    };
+  }
+
+  /**
+   * Register one normalized approval handler for all approval-style requests.
+   *
+   * This higher-level helper hides the underlying protocol split between
+   * approval methods, tool user-input prompts, and MCP elicitation requests so
+   * most callers can implement a single "should this proceed?" path.
+   */
+  public handleApprovalRequests(
+    handler: AppServerClientApprovalHandler
+  ): () => void {
+    const activeMethods = [...APPROVAL_REQUEST_METHODS];
+
+    for (const method of activeMethods) {
+      if (this.#autoHandledRequestMethods.has(method)) {
+        throw new RpcStateError(
+          `Cannot register more than one auto-handler for server request "${method}".`
+        );
+      }
+    }
+
+    for (const method of activeMethods) {
+      this.#autoHandledRequestMethods.add(method);
+    }
+
+    const unsubscribe = this.#session.onRequest((request) => {
+      if (!isApprovalRequestMethod(request.method)) {
+        return;
+      }
+
+      const wrapper = this.#createNormalizedApprovalRequestWrapper(
+        request.method,
+        request
+      );
+      let resultPromise: Promise<AppServerClientApprovalResponse | undefined>;
+
+      try {
+        resultPromise = Promise.resolve(handler(wrapper.request));
+      } catch (error) {
+        resultPromise = Promise.reject(error);
+      }
+
+      void resultPromise
+        .then(async (result) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          if (result === undefined) {
+            await wrapper.respondError({
+              code: INTERNAL_RPC_ERROR_CODE,
+              message: "Approval handler must return a response."
+            });
+            return;
+          }
+
+          await wrapper.respond(result as JsonValue);
+        })
+        .catch(async (error: unknown) => {
+          if (wrapper.wasResponded()) {
+            return;
+          }
+
+          await wrapper.request.respondError({
+            code: INTERNAL_RPC_ERROR_CODE,
+            message: asError(error).message
+          });
+        });
     });
 
     return () => {
@@ -1074,12 +1142,36 @@ export class AppServerClient {
       params: request.params as AppServerClientApprovalRequestOf<Method>["params"]
     };
   }
-}
 
-function isApprovalRequestMethod(
-  method: string
-): method is AppServerClientApprovalRequestMethod {
-  return (APPROVAL_REQUEST_METHODS as readonly string[]).includes(method);
+  #createNormalizedApprovalRequestWrapper<
+    Method extends AppServerClientApprovalRequestMethod
+  >(method: Method, request: RpcInboundRequest): {
+    readonly request: AppServerClientInboundApprovalRequest;
+    readonly respond: (result: JsonValue) => Promise<void>;
+    readonly respondError: (error: RpcErrorObject) => Promise<void>;
+    readonly wasResponded: () => boolean;
+  } {
+    const wrapper = this.#createTypedRequestWrapper(method, request);
+    const approvalRequest = this.#createApprovalRequestWrapper(
+      method,
+      request
+    ) as AppServerClientApprovalRequest;
+
+    return {
+      request: {
+        ...createNormalizedApprovalRequest(approvalRequest),
+        respond: wrapper.request.respond,
+        respondError: wrapper.request.respondError
+      } as AppServerClientInboundApprovalRequest,
+      respond: async (result) => {
+        await wrapper.request.respond(result as never);
+      },
+      respondError: async (error) => {
+        await wrapper.request.respondError(error);
+      },
+      wasResponded: wrapper.wasResponded
+    };
+  }
 }
 
 function jsonValuesEqual(left: JsonValue, right: JsonValue): boolean {

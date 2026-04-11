@@ -62,6 +62,10 @@ export default defineConfig({
               link: "/guide/#handle-approvals-and-server-requests"
             },
             {
+              text: "Approve Mutating Tools",
+              link: "/guide/#approve-mutating-app-and-mcp-tool-calls"
+            },
+            {
               text: "Low-Level APIs",
               link: "/guide/#drop-to-lower-level-apis"
             },
