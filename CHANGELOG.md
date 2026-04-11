@@ -12,6 +12,14 @@ The repository follows a lightweight Keep a Changelog style:
 
 Add short bullet points here before each release.
 
+## 0.1.5 - 2026-04-11
+
+- Added a normalized approval API so clients can handle approval-style app-server prompts through one code path while keeping the lower-level per-method approval hooks available when needed.
+- Expanded approval handling and docs for mutating app and MCP tool calls, including real coverage for the Linear side-effect approval flow.
+- Refreshed the committed stable and experimental generated bindings and JSON schemas against the current `codex` CLI.
+- Updated the bindings generation/check scripts to normalize trailing whitespace in generated TypeScript output so regeneration and stale-checking stay in sync.
+- Removed deprecated explicit `false` TypeScript interop settings that TypeScript 6 now flags during the build and bindings-check flows.
+
 ## 0.1.4 - 2026-03-27
 
 - Added a zero-config `createClient()` factory that starts a local `codex app-server`, completes the required initialize handshake automatically, and returns a ready-to-use managed client.
