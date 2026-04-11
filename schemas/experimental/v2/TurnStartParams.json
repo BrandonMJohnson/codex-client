@@ -577,6 +577,16 @@
       ],
       "description": "Override the personality for this turn and subsequent turns."
     },
+    "responsesapiClientMetadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Optional turn-scoped Responses API client metadata.",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
     "sandboxPolicy": {
       "anyOf": [
         {

@@ -43,7 +43,10 @@ function createTurn(turnId: string, status: Turn["status"]): Turn {
     id: turnId,
     items: [],
     status,
-    error: null
+    error: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null
   };
 }
 

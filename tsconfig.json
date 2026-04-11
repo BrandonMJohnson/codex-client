@@ -17,8 +17,6 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "useUnknownInCatchVariables": true,
-    "allowSyntheticDefaultImports": false,
-    "esModuleInterop": false,
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },

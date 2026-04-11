@@ -1536,12 +1536,7 @@ describe("AppServerClient", () => {
     });
     const resumedThread = createThread("thread-1", {
       turns: [
-        {
-          id: "turn-1",
-          items: [],
-          status: "completed",
-          error: null
-        }
+        createTurn("turn-1", "completed")
       ]
     });
     transport.emitMessage({
@@ -2811,6 +2806,9 @@ function createTurn(
     items: [],
     status,
     error: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
     ...overrides
   };
 }
@@ -2821,6 +2819,7 @@ function createThread(
 ): Thread {
   return {
     id: threadId,
+    forkedFromId: null,
     preview: "Demo thread",
     ephemeral: false,
     modelProvider: "openai",

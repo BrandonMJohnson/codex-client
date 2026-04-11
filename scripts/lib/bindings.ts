@@ -168,9 +168,8 @@ async function normalizeGeneratedTypeScript(directory: string): Promise<void> {
       .filter((filePath) => filePath.endsWith(".ts"))
       .map(async (filePath) => {
         const source = await readFile(filePath, "utf8");
-        const normalizedSource = await rewriteRelativeTsSpecifiersForFile(
-          filePath,
-          source,
+        const normalizedSource = stripTrailingWhitespace(
+          await rewriteRelativeTsSpecifiersForFile(filePath, source),
         );
 
         if (normalizedSource !== source) {
@@ -378,6 +377,10 @@ function toPosixPath(filePath: string): string {
 
 function stableStringifyJson(value: unknown): string {
   return JSON.stringify(sortJsonValue(value), null, 2);
+}
+
+function stripTrailingWhitespace(source: string): string {
+  return source.replace(/[ \t]+$/gm, "");
 }
 
 function sortJsonValue(value: unknown): unknown {

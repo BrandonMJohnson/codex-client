@@ -28,6 +28,7 @@ The protocol details in this plan are derived from that README, including:
 - Extended `handleApprovals()` to cover both `item/tool/requestUserInput` and `mcpServer/elicitation/request`, documented that mutating app/MCP tool calls require `experimentalApi: true`, and added a live Linear MCP integration test that accepts the approval prompt before the tool write proceeds.
 - Added a normalized `handleApprovalRequests()` helper so callers can implement one approval path without branching on the underlying app-server request method.
 - Added a live integration test that prompts a turn to use the Linear MCP for issue `MUD-115`, captures the resulting typed `item/tool/call` requests, returns tool-shaped responses through the client API, and asserts the Linear tool traffic resolves cleanly through turn completion.
+- Refreshed the committed stable and experimental generated bindings/schemas against the current `codex` CLI, updated test fixtures for the refreshed thread/turn shapes, removed deprecated explicit `false` interop flags from the shared TypeScript config, and taught the bindings scripts to normalize trailing whitespace so `bindings:generate` and `bindings:check` stay in sync.
 
 ### 2026-03-27
 

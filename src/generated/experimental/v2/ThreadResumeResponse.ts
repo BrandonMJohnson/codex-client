@@ -8,7 +8,7 @@ import type { AskForApproval } from "./AskForApproval.js";
 import type { SandboxPolicy } from "./SandboxPolicy.js";
 import type { Thread } from "./Thread.js";
 
-export type ThreadResumeResponse = { thread: Thread, model: string, modelProvider: string, serviceTier: ServiceTier | null, cwd: string, approvalPolicy: AskForApproval, 
+export type ThreadResumeResponse = { thread: Thread, model: string, modelProvider: string, serviceTier: ServiceTier | null, cwd: string, approvalPolicy: AskForApproval,
 /**
  * Reviewer currently used for approval requests on this thread.
  */
