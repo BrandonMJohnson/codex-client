@@ -25,6 +25,14 @@ const allowLiveLogoutTest =
   process.env.CODEX_CLIENT_ALLOW_LIVE_LOGOUT_TEST === "1";
 const itIfCodexAndLiveLogout =
   codexVersion === null || !allowLiveLogoutTest ? it.skip : it;
+const linearMcpIntegrationCwd = process.env.CODEX_CLIENT_LINEAR_MCP_TEST_CWD;
+const linearMcpIntegrationIssueId = process.env.CODEX_CLIENT_LINEAR_MCP_TEST_ISSUE_ID;
+const itIfCodexAndLiveLinearMcp =
+  codexVersion === null ||
+  linearMcpIntegrationCwd === undefined ||
+  linearMcpIntegrationIssueId === undefined
+    ? it.skip
+    : it;
 
 type CommandExecOutputDeltaNotification = {
   method: "command/exec/outputDelta";
@@ -768,9 +776,14 @@ describe("codex app-server stdio integration", () => {
           }
         );
 
-        const completedAgentMessage = run.completedItems.find(
-          (item) => item.type === "agentMessage"
+        const completedAgentMessages = run.completedItems.filter(
+          (
+            item
+          ): item is Extract<(typeof run.completedItems)[number], { type: "agentMessage" }> =>
+            item.type === "agentMessage"
         );
+        const completedAgentMessage =
+          completedAgentMessages[completedAgentMessages.length - 1];
 
         expect(run.start.turn.id).toBe(run.completed.params.turn.id);
         expect(run.completed.params.turn.status).toBe("completed");
@@ -1075,62 +1088,19 @@ describe("codex app-server stdio integration", () => {
           resolvedNotifications.push(notification);
         });
 
-        const stopApprovalHandlers = client.handleApprovals({
-          applyPatchApproval: (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "denied"
-            };
-          },
-          execCommandApproval: (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "denied"
-            };
-          },
-          "item/commandExecution/requestApproval": (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "decline"
-            };
-          },
-          "item/fileChange/requestApproval": (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              decision: "decline"
-            };
-          },
-          "item/permissions/requestApproval": (request) => {
-            settleApprovalRequest?.({
-              requestId: request.id,
-              method: request.method,
-              params: request.params as Record<string, unknown>
-            });
-            settleApprovalRequest = undefined;
-            return {
-              permissions: {},
-              scope: "turn"
-            };
+        const stopApprovalHandlers = client.handleApprovalRequests((request) => {
+          settleApprovalRequest?.({
+            requestId: request.id,
+            method: request.method,
+            params: request.rawParams as Record<string, unknown>
+          });
+          settleApprovalRequest = undefined;
+
+          switch (request.kind) {
+            case "permissions":
+              return request.deny();
+            default:
+              return request.deny();
           }
         });
 
@@ -1220,6 +1190,218 @@ describe("codex app-server stdio integration", () => {
             })
           })
         );
+
+        stopApprovalHandlers();
+        await client.close();
+        await waitForExit(child);
+      } finally {
+        await cleanupChild(child);
+      }
+    },
+    60_000
+  );
+
+  itIfCodexAndLiveLinearMcp(
+    "handles the live Linear MCP side-effect approval flow during a turn",
+    async () => {
+      if (
+        linearMcpIntegrationCwd === undefined ||
+        linearMcpIntegrationIssueId === undefined
+      ) {
+        throw new Error(
+          "Expected CODEX_CLIENT_LINEAR_MCP_TEST_CWD and CODEX_CLIENT_LINEAR_MCP_TEST_ISSUE_ID to be set."
+        );
+      }
+
+      const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+        cwd: linearMcpIntegrationCwd,
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      const stderrChunks: string[] = [];
+      const resolvedNotifications: Array<
+        AppServerClientNotificationOf<"serverRequest/resolved">
+      > = [];
+      const userInputRequests: Array<{
+        requestId: string | number;
+        questionIds: string[];
+        optionLabels: string[];
+      }> = [];
+      const elicitationRequests: Array<{
+        requestId: string | number;
+        serverName: string;
+        message: string;
+        approvalKind: string | null;
+      }> = [];
+
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderrChunks.push(chunk);
+      });
+
+      const transport = new StdioTransport({
+        input: child.stdout,
+        output: child.stdin
+      });
+      const client = new AppServerClient({ transport });
+
+      try {
+        await client.initialize({
+          clientInfo: {
+            name: "codex-app-server-client-tests",
+            title: null,
+            version: codexVersion ?? "unknown"
+          },
+          capabilities: {
+            experimentalApi: true
+          }
+        });
+        client.onEvent("serverRequest/resolved", (notification) => {
+          resolvedNotifications.push(notification);
+        });
+        const stopApprovalHandlers = client.handleApprovalRequests((request) => {
+          switch (request.kind) {
+            case "toolUserInput":
+              userInputRequests.push({
+                requestId: request.id,
+                questionIds: request.questions.map((question) => question.id),
+                optionLabels: request.questions.flatMap((question) =>
+                  question.options.map((option) => option.label)
+                )
+              });
+              return request.approve();
+            case "mcpElicitation":
+              elicitationRequests.push({
+                requestId: request.id,
+                serverName: request.serverName,
+                message: request.message ?? "",
+                approvalKind: readCodexApprovalKind(request.rawParams._meta)
+              });
+              return request.approve();
+            default:
+              return request.approve();
+          }
+        });
+
+        const apps = await client.appList({});
+        const linearApp = apps.data.find(
+          (app) => app.name === "Linear MCP Server"
+        );
+
+        expect(linearApp).toEqual(
+          expect.objectContaining({
+            id: expect.any(String),
+            isAccessible: true,
+            isEnabled: true
+          })
+        );
+
+        if (linearApp === undefined) {
+          throw new Error("Expected the Linear MCP Server app to be available.");
+        }
+
+        const modelList = await client.modelList({ includeHidden: true });
+        const preferredModel = selectPreferredIntegrationModel(modelList.data);
+        const threadStart = await client.thread.start({
+          cwd: linearMcpIntegrationCwd,
+          ...(preferredModel ? { model: preferredModel } : {}),
+          experimentalRawEvents: false,
+          persistExtendedHistory: false
+        });
+
+        const run = await client.turn.run(
+          {
+            threadId: threadStart.thread.id,
+            ...(preferredModel ? { model: preferredModel } : {}),
+            effort: "low",
+            input: [
+              {
+                type: "mention",
+                name: linearApp.name,
+                path: `app://${linearApp.id}`
+              },
+              {
+                type: "text",
+                text: [
+                  "Use this Linear MCP now.",
+                  `Read issue ${linearMcpIntegrationIssueId} and add a note to it that says exactly test.`,
+                  "Do not answer until you have made at least one Linear MCP tool call.",
+                  "After using the Linear MCP, reply with the exact text linear-mcp-tool-call-complete."
+                ].join(" "),
+                text_elements: []
+              }
+            ]
+          },
+          {
+            completionTimeoutMs: 45_000
+          }
+        );
+
+        const completedAgentMessage = run.completedItems.find(
+          (item) => item.type === "agentMessage"
+        );
+        const completedLinearMcpToolCalls = run.completedItems.filter(
+          (
+            item
+          ): item is Extract<(typeof run.completedItems)[number], { type: "mcpToolCall" }> =>
+            item.type === "mcpToolCall" && item.tool.toLowerCase().includes("linear")
+        );
+
+        expect(completedLinearMcpToolCalls.length).toBeGreaterThan(0);
+        expect(
+          userInputRequests.length + elicitationRequests.length
+        ).toBeGreaterThan(0);
+        expect(
+          completedLinearMcpToolCalls.some(
+            (toolCall) =>
+              JSON.stringify(toolCall.arguments).includes(linearMcpIntegrationIssueId)
+          )
+        ).toBe(true);
+        expect(
+          completedLinearMcpToolCalls.some(
+            (toolCall) =>
+              /(save|comment|note)/i.test(toolCall.tool) &&
+              toolCall.status === "completed"
+          )
+        ).toBe(true);
+        expect(
+          userInputRequests.some(
+            (request) =>
+              request.questionIds.length > 0 &&
+              request.optionLabels.some((label) => /accept/i.test(label))
+          )
+        ).toBe(userInputRequests.length > 0);
+        expect(
+          elicitationRequests.some(
+            (request) =>
+              request.serverName === "codex_apps" &&
+              request.approvalKind === "mcp_tool_call" &&
+              /Allow Linear MCP Server/i.test(request.message)
+          )
+        ).toBe(elicitationRequests.length > 0);
+        expect(
+          resolvedNotifications.some((notification) =>
+            userInputRequests.some(
+              (request) => notification.params.requestId === request.requestId
+            )
+          )
+        ).toBe(userInputRequests.length > 0);
+        expect(
+          resolvedNotifications.some((notification) =>
+            elicitationRequests.some(
+              (request) => notification.params.requestId === request.requestId
+            )
+          )
+        ).toBe(elicitationRequests.length > 0);
+        expect(run.completed.params.turn.status).toBe("completed");
+        expect(completedAgentMessage?.type).toBe("agentMessage");
+
+        if (completedAgentMessage?.type !== "agentMessage") {
+          throw new Error("Expected the Linear MCP turn to complete an agentMessage.");
+        }
+
+        expect(
+          normalizeNotificationText(completedAgentMessage.text)
+        ).toMatch(new RegExp(`${escapeRegExp(linearMcpIntegrationIssueId)}|test`, "i"));
 
         stopApprovalHandlers();
         await client.close();
@@ -1721,22 +1903,12 @@ async function waitForCompletedThreadResume(
 async function waitForApprovalRequest(
   request: Promise<{
     requestId: string | number;
-    method:
-      | "applyPatchApproval"
-      | "execCommandApproval"
-      | "item/commandExecution/requestApproval"
-      | "item/fileChange/requestApproval"
-      | "item/permissions/requestApproval";
+    method: AppServerClientApprovalRequestMethod;
     params: Record<string, unknown>;
   }>
 ): Promise<{
   requestId: string | number;
-  method:
-    | "applyPatchApproval"
-    | "execCommandApproval"
-    | "item/commandExecution/requestApproval"
-    | "item/fileChange/requestApproval"
-    | "item/permissions/requestApproval";
+  method: AppServerClientApprovalRequestMethod;
   params: Record<string, unknown>;
 }> {
   return await Promise.race([
@@ -1901,6 +2073,19 @@ function collectAgentMessageDeltaText(
 
 function normalizeNotificationText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
+}
+
+function readCodexApprovalKind(meta: unknown): string | null {
+  if (typeof meta !== "object" || meta === null || Array.isArray(meta)) {
+    return null;
+  }
+
+  const approvalKind = (meta as Record<string, unknown>).codex_approval_kind;
+  return typeof approvalKind === "string" ? approvalKind : null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function collectCommandOutput(

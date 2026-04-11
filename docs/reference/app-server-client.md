@@ -90,6 +90,7 @@ await client.initialize({
     version: "0.0.1"
   },
   capabilities: {
+    experimentalApi: false,
     optOutNotificationMethods: []
   }
 });
@@ -101,6 +102,9 @@ Important behavior:
 - the client rejects attempts to reuse the same session with different initialize params
 - `options.sendInitialized` defaults to `true`
 - `options.request` forwards request options such as timeouts and abort signals
+- set `capabilities.experimentalApi` to `true` when you need experimental methods and fields such as `item/tool/requestUserInput` for side-effecting app or MCP tool calls
+
+For mutating app and MCP tool flows, keep that capability note in mind even if the approval prompt ultimately arrives as `mcpServer/elicitation/request`; the live app-server may use either request shape depending on the connector path.
 
 If you need to delay the second handshake step:
 
@@ -690,6 +694,44 @@ Important behavior:
 - thrown errors are translated into JSON-RPC internal error responses
 - the returned cleanup function unregisters the handler
 
+### `client.handleApprovalRequests(handler)`
+
+Registers one normalized handler for all approval-style server requests.
+
+```ts
+const stopApprovals = client.handleApprovalRequests((request) => {
+  switch (request.kind) {
+    case "permissions":
+      return request.allowRequestedPermissions("turn");
+    case "toolUserInput":
+      return request.approve();
+    case "mcpElicitation":
+      return request.approve();
+    default:
+      return request.deny();
+  }
+});
+```
+
+This is the simplest approval entrypoint for most applications. The request object includes normalized metadata like `kind`, `threadId`, `turnId`, `itemId`, `message`, and `questions`, plus helper methods such as `approve()` and `deny()` that translate back into the exact protocol response shape.
+
+### `client.onApprovalRequest(listener)`
+
+Subscribes to approval-style server requests through the same normalized request shape without auto-responding.
+
+```ts
+const stop = client.onApprovalRequest(async (request) => {
+  if (request.kind === "permissions") {
+    await request.respond(request.allowRequestedPermissions("turn"));
+    return;
+  }
+
+  await request.respond(request.approve());
+});
+```
+
+Use this when you want the normalized approval request metadata but still need manual control over when or whether the response is sent.
+
 ### `client.handleApprovals(handlers)`
 
 Registers typed handlers for approval-oriented server request methods:
@@ -699,6 +741,8 @@ Registers typed handlers for approval-oriented server request methods:
 - `item/commandExecution/requestApproval`
 - `item/fileChange/requestApproval`
 - `item/permissions/requestApproval`
+- `item/tool/requestUserInput`
+- `mcpServer/elicitation/request`
 
 ```ts
 const stopApprovals = client.handleApprovals({
@@ -707,11 +751,34 @@ const stopApprovals = client.handleApprovals({
   "item/permissions/requestApproval": () => ({
     permissions: {},
     scope: "turn"
+  }),
+  "item/tool/requestUserInput": (request) => ({
+    answers: Object.fromEntries(
+      request.params.questions.map((question) => [
+        question.id,
+        { answers: ["Accept"] }
+      ])
+    )
+  }),
+  "mcpServer/elicitation/request": () => ({
+    action: "accept",
+    content: {},
+    _meta: null
   })
 });
 ```
 
-Like `handleRequest()`, approval handlers are auto-response handlers and must return the exact protocol response for their method.
+Like `handleRequest()`, approval handlers are auto-response handlers and must return the exact protocol response for their method. Side-effecting app and MCP tool calls can arrive through either `item/tool/requestUserInput` or `mcpServer/elicitation/request`, so `handleApprovals()` covers both approval-style prompt shapes.
+
+Prefer `handleApprovalRequests()` unless you explicitly want to branch on the raw protocol method names yourself.
+
+Typical mutating app-tool flow:
+
+1. A turn starts an `mcpToolCall` item.
+2. app-server pauses on an approval prompt.
+3. Your handler answers that prompt.
+4. app-server emits `serverRequest/resolved`.
+5. The `mcpToolCall` item completes and the turn continues.
 
 ### `client.onError(listener)`
 
